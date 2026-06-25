@@ -10,23 +10,36 @@
     "uuid": "0fd5dc09-2fc7-4037-a0b4-36beffbd3b2b",
     "sdkVersion": "3",
     "enableMultiJS": true,
-    "targetPlatforms": [
-      "aplite",
-      "basalt",
-      "chalk",
-      "diorite",
-      "emery",
-      "flint",
-      "gabbro"
-    ],
+    "targetPlatforms": ["aplite", "basalt", "chalk", "diorite", "emery", "flint"],
+    "capabilities": ["location"],
     "watchapp": {
-      "watchface": false
+      "watchface": true
     },
     "messageKeys": [
-      "dummy"
+      "WeatherCondition",
+      "WeatherTemperature",
+      "WeatherForecastCondition",
+      "WeatherForecastHighTemp",
+      "WeatherForecastLowTemp",
+      "WeatherUVIndex"
     ],
     "resources": {
-      "media": []
+      "media": [
+        { "file": "data/WEATHER_GENERIC.pdc", "name": "WEATHER_GENERIC", "type": "raw" },
+        { "file": "data/WEATHER_THUNDERSTORM.pdc", "name": "WEATHER_THUNDERSTORM", "type": "raw" },
+        { "file": "data/WEATHER_RAINING_AND_SNOWING.pdc", "name": "WEATHER_RAINING_AND_SNOWING", "type": "raw" },
+        { "file": "data/WEATHER_PARTLY_CLOUDY_NIGHT.pdc", "name": "WEATHER_PARTLY_CLOUDY_NIGHT", "type": "raw" },
+        { "file": "data/WEATHER_PARTLY_CLOUDY.pdc", "name": "WEATHER_PARTLY_CLOUDY", "type": "raw" },
+        { "file": "data/WEATHER_LIGHT_SNOW.pdc", "name": "WEATHER_LIGHT_SNOW", "type": "raw" },
+        { "file": "data/WEATHER_LIGHT_RAIN.pdc", "name": "WEATHER_LIGHT_RAIN", "type": "raw" },
+        { "file": "data/WEATHER_HEAVY_SNOW.pdc", "name": "WEATHER_HEAVY_SNOW", "type": "raw" },
+        { "file": "data/WEATHER_HEAVY_RAIN.pdc", "name": "WEATHER_HEAVY_RAIN", "type": "raw" },
+        { "file": "data/WEATHER_CLOUDY.pdc", "name": "WEATHER_CLOUDY", "type": "raw" },
+        { "file": "data/WEATHER_CLEAR_NIGHT.pdc", "name": "WEATHER_CLEAR_NIGHT", "type": "raw" },
+        { "file": "data/WEATHER_CLEAR_DAY.pdc", "name": "WEATHER_CLEAR_DAY", "type": "raw" },
+        { "file": "data/BATTERY_CHARGE.pdc", "name": "BATTERY_CHARGE", "type": "raw" },
+        { "file": "data/BATTERY_BG.pdc", "name": "BATTERY_BG", "type": "raw" }
+      ]
     }
   }
 }
