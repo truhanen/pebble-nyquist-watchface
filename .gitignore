@@ -1,1 +1,4 @@
 .idea
+build
+tmp
+.lock-waf_darwin_build
