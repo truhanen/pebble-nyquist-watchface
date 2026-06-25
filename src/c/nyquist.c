@@ -3,7 +3,7 @@
 #include "messaging.h"
 
 // ── Hand drawing parameters (widths fixed; lengths computed from screen size) ─
-#define EDGE_WIDTH         10
+#define EDGE_WIDTH         12
 #define HALO_WIDTH          2
 #define MINUTE_OUTER_W    (2 * EDGE_WIDTH)
 #define MINUTE_INNER_W    EDGE_WIDTH
