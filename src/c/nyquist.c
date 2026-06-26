@@ -25,6 +25,7 @@
 #define BAT_NUB_W    6
 #define BAT_NUB_H    3
 #define BAT_BORDER   2
+#define BAT_GAP      2
 
 // ── UI layout ──────────────────────────────────────────────────────────────
 #define TOP_H     28   // GOTHIC_24 (24px) + padding
@@ -249,31 +250,37 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   BatteryChargeState bat = battery_state_service_peek();
   uint8_t pct = (bat.charge_percent > 0) ? bat.charge_percent : 5;
 
-  int bat_x = w - BAT_W - 4;
+  int bat_x = w - BAT_W - 5;
   int bat_y = 3;
 
   int nub_x = bat_x + (BAT_W - BAT_NUB_W) / 2;
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(nub_x, bat_y, BAT_NUB_W, BAT_NUB_H), 0, GCornerNone);
 
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_context_set_stroke_width(ctx, BAT_BORDER);
-  graphics_draw_rect(ctx, GRect(bat_x, bat_y + BAT_NUB_H, BAT_W, BAT_H));
+  // Rect 1: black outer body
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_fill_rect(ctx, GRect(bat_x, bat_y + BAT_NUB_H, BAT_W, BAT_H), 2, GCornersAll);
 
-  int fill_inner_h = BAT_H - 2 * BAT_BORDER;
+  // Rect 2: white inner area (border = BAT_BORDER px)
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, GRect(bat_x + BAT_BORDER, bat_y + BAT_NUB_H + BAT_BORDER,
+                                BAT_W - 2 * BAT_BORDER, BAT_H - 2 * BAT_BORDER), 1, GCornersAll);
+
+  // Rect 3: black charge fill (gap = BAT_GAP px inside the white area)
+  int fill_inner_h = BAT_H - 2 * (BAT_BORDER + BAT_GAP);
   int fill_h = fill_inner_h * pct / 100;
-  int fill_y = bat_y + BAT_NUB_H + BAT_BORDER + (fill_inner_h - fill_h);
+  int fill_y = bat_y + BAT_NUB_H + BAT_BORDER + BAT_GAP + (fill_inner_h - fill_h);
 #ifdef PBL_COLOR
   graphics_context_set_fill_color(ctx, pct <= 20 ? GColorRed : GColorBlack);
 #else
   graphics_context_set_fill_color(ctx, GColorBlack);
 #endif
   if (bat.is_charging) {
-    graphics_fill_rect(ctx, GRect(bat_x + BAT_BORDER, bat_y + BAT_NUB_H + BAT_BORDER,
-                                  BAT_W - 2 * BAT_BORDER, fill_inner_h), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bat_x + BAT_BORDER + BAT_GAP, bat_y + BAT_NUB_H + BAT_BORDER + BAT_GAP,
+                                  BAT_W - 2 * (BAT_BORDER + BAT_GAP), fill_inner_h), 0, GCornerNone);
   } else {
-    graphics_fill_rect(ctx, GRect(bat_x + BAT_BORDER, fill_y,
-                                  BAT_W - 2 * BAT_BORDER, fill_h), 0, GCornerNone);
+    graphics_fill_rect(ctx, GRect(bat_x + BAT_BORDER + BAT_GAP, fill_y,
+                                  BAT_W - 2 * (BAT_BORDER + BAT_GAP), fill_h), 0, GCornerNone);
   }
 
   char bat_str[4];
