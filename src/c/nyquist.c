@@ -2,7 +2,7 @@
 #include "weather.h"
 #include "messaging.h"
 
-// ── Hand drawing parameters (widths fixed; lengths computed from screen size) ─
+// ── Hand drawing parameters ────────────────────────────────────────────────
 #define EDGE_WIDTH         12
 #define HALO_WIDTH          2
 #define MINUTE_OUTER_W    (2 * EDGE_WIDTH)
@@ -11,34 +11,40 @@
 #define HOUR_INNER_W      (HOUR_OUTER_W - EDGE_WIDTH)
 #define HAND_TAIL          (HOUR_OUTER_W / 2)
 #define TICK_WIDTH          2
-#define TICK_MINOR_LEN      6
-#define TICK_MAJOR_LEN     10
+#define TICK_HALO_W         6   // halo stroke width
+#define TICK_LEN            6   // all ticks same length
+#define TICK_R  84   // fixed radius for all ticks
 
-// Hand lengths and tick radius are derived from the shorter screen half-dim:
-//   minute_len = half * 94%,  hour_len = half * 66%,  tick_r = half * 96%
+// Hand lengths as % of shorter screen half-dim
 #define HAND_MINUTE_FRAC   88
 #define HAND_HOUR_FRAC     61
-#define TICK_R_FRAC        82
 
 // ── Vertical battery icon dimensions ──────────────────────────────────────
-#define BAT_W       14   // body width
-#define BAT_H       20   // body height
-#define BAT_NUB_W    6   // terminal nub width
-#define BAT_NUB_H    3   // terminal nub height
-#define BAT_BORDER   2   // stroke/border width
+#define BAT_W       14
+#define BAT_H       20
+#define BAT_NUB_W    6
+#define BAT_NUB_H    3
+#define BAT_BORDER   2
 
 // ── UI layout ──────────────────────────────────────────────────────────────
-#define TOP_H     22   // height of top info strip
-#define BOTTOM_H  34   // height of bottom info strip
+#define TOP_H     28   // GOTHIC_24 (24px) + padding
+#define BOTTOM_H  36   // LECO_32  (32px) + padding
+
+// ── Bottom-strip separator dots ────────────────────────────────────────────
+#define LECO36_PAIR_W  40   // approximate px width of two LECO_32 digits
+#define DOT_SIZE        4   // separator square side length
+#define DOT_GAP         1   // gap between number group and dot
 
 static Window *s_window;
 static Layer  *s_canvas_layer;
 
 static int  s_hours, s_minutes;
-static char s_time_str[6];   // "HH:MM"
-static char s_date_str[8];   // "dd.mm."
+static char s_hours_str[3];
+static char s_minutes_str[3];
+static char s_day_str[3];
+static char s_month_str[3];
 
-// ── Recolor all draw commands in a PDC image ──────────────────────────────
+// ── Recolor PDC image ─────────────────────────────────────────────────────
 static bool prv_recolor_cb(GDrawCommand *cmd, uint32_t index, void *ctx) {
   GColor *c = (GColor *)ctx;
   gdraw_command_set_fill_color(cmd, c[0]);
@@ -59,24 +65,8 @@ static int32_t isqrt32(int32_t n) {
   return x;
 }
 
-// ── Returns the point where the ray from center in direction (sin_a, cos_a)
-//    intersects the square [center ± r].
-static GPoint rect_edge_point(GPoint center, int32_t sin_a, int32_t cos_a, int r) {
-  int32_t adx = (sin_a >= 0) ? sin_a : -sin_a;
-  int32_t ady = (cos_a >= 0) ? cos_a : -cos_a;
-  GPoint p;
-  if (adx >= ady) {
-    p.x = center.x + (sin_a >= 0 ? r : -r);
-    p.y = center.y + (int32_t)(-(int64_t)cos_a * r / adx);
-  } else {
-    p.y = center.y + (cos_a >= 0 ? -r : r);
-    p.x = center.x + (int32_t)((int64_t)sin_a * r / ady);
-  }
-  return p;
-}
-
-// ── Returns inner tick point, inset radially toward center by tick_len px ─
-static GPoint rect_tick_inner(GPoint outer, GPoint center, int tick_len) {
+// ── Returns inner tick point inset by tick_len toward center ──────────────
+static GPoint tick_inner(GPoint outer, GPoint center, int tick_len) {
   int32_t dx = center.x - outer.x;
   int32_t dy = center.y - outer.y;
   int32_t dist = isqrt32(dx * dx + dy * dy);
@@ -87,18 +77,44 @@ static GPoint rect_tick_inner(GPoint outer, GPoint center, int tick_len) {
   };
 }
 
-// ── Draws the pentagon outline of a hand (base + two edges + two tip lines) ─
+// ── Draw all 12 tick marks: white halo, black body, fixed radius ──────────
+static void draw_all_ticks(GContext *ctx, GPoint center) {
+  for (int i = 0; i < 12; i++) {
+    int32_t angle = i * TRIG_MAX_ANGLE / 12;
+    int32_t sin_a = sin_lookup(angle);
+    int32_t cos_a = cos_lookup(angle);
+
+    int tick_r = TICK_R;
+
+    GPoint outer = {
+      center.x + (int32_t)((int64_t)sin_a * tick_r / TRIG_MAX_RATIO),
+      center.y - (int32_t)((int64_t)cos_a * tick_r / TRIG_MAX_RATIO),
+    };
+    GPoint inner = tick_inner(outer, center, TICK_LEN);
+
+    // halo
+    graphics_context_set_stroke_color(ctx, GColorWhite);
+    graphics_context_set_stroke_width(ctx, TICK_HALO_W);
+    graphics_draw_line(ctx, outer, inner);
+    // body
+    graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_context_set_stroke_width(ctx, TICK_WIDTH);
+    graphics_draw_line(ctx, outer, inner);
+  }
+}
+
+// ── Draws the pentagon outline of a hand ──────────────────────────────────
 static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
                              int outer_dist, int half_width, int apex_ext,
                              int tail, int stroke_w, GColor color) {
   int32_t sin_a = sin_lookup(angle);
   int32_t cos_a = cos_lookup(angle);
 
-  GPoint inner = {
+  GPoint inner_pt = {
     center.x - (int32_t)tail       * sin_a / TRIG_MAX_RATIO,
     center.y + (int32_t)tail       * cos_a / TRIG_MAX_RATIO,
   };
-  GPoint outer = {
+  GPoint outer_pt = {
     center.x + (int32_t)outer_dist * sin_a / TRIG_MAX_RATIO,
     center.y - (int32_t)outer_dist * cos_a / TRIG_MAX_RATIO,
   };
@@ -106,13 +122,13 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
   int x_diff = (int32_t)half_width * cos_a / TRIG_MAX_RATIO;
   int y_diff = (int32_t)half_width * sin_a / TRIG_MAX_RATIO;
 
-  GPoint inner_right = { inner.x + x_diff, inner.y + y_diff };
-  GPoint inner_left  = { inner.x - x_diff, inner.y - y_diff };
-  GPoint outer_right = { outer.x + x_diff, outer.y + y_diff };
-  GPoint outer_left  = { outer.x - x_diff, outer.y - y_diff };
+  GPoint inner_right = { inner_pt.x + x_diff, inner_pt.y + y_diff };
+  GPoint inner_left  = { inner_pt.x - x_diff, inner_pt.y - y_diff };
+  GPoint outer_right = { outer_pt.x + x_diff, outer_pt.y + y_diff };
+  GPoint outer_left  = { outer_pt.x - x_diff, outer_pt.y - y_diff };
   GPoint apex        = {
-    outer.x + (int32_t)apex_ext * sin_a / TRIG_MAX_RATIO,
-    outer.y - (int32_t)apex_ext * cos_a / TRIG_MAX_RATIO,
+    outer_pt.x + (int32_t)apex_ext * sin_a / TRIG_MAX_RATIO,
+    outer_pt.y - (int32_t)apex_ext * cos_a / TRIG_MAX_RATIO,
   };
 
   graphics_context_set_stroke_color(ctx, color);
@@ -140,48 +156,51 @@ static void draw_hand_fill(GContext *ctx, GPoint center, int32_t angle,
   gpath_destroy(path);
 }
 
+// ── Draw a dot at the number baseline, with fill + stroke ─────────────────
+#define LECO32_BASELINE_Y  29  // y-offset of bottom of LECO_32 glyphs in BOTTOM_H strip
+
+static void prv_draw_dot(GContext *ctx, int x, int y) {
+  graphics_context_set_fill_color(ctx, GColorBlack);
+  graphics_context_set_stroke_color(ctx, GColorBlack);
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_fill_rect(ctx, GRect(x, y, DOT_SIZE, DOT_SIZE), 0, GCornerNone);
+  graphics_draw_rect(ctx, GRect(x, y, DOT_SIZE, DOT_SIZE));
+}
+
+// ── Draw a colon (two stacked dots), fixed position relative to glyph ─────
+static void draw_colon(GContext *ctx, int x, int strip_y) {
+  prv_draw_dot(ctx, x, strip_y + 15);  // upper dot
+  prv_draw_dot(ctx, x, strip_y + 26);  // lower dot
+}
+
+// ── Draw a period dot at number baseline ──────────────────────────────────
+static void draw_period(GContext *ctx, int x, int strip_y) {
+  prv_draw_dot(ctx, x, strip_y + LECO32_BASELINE_Y);
+}
+
 // ── Main draw callback ─────────────────────────────────────────────────────
 static void canvas_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int w = bounds.size.w;
   int h = bounds.size.h;
-  GPoint center = GPoint(w / 2, h / 2);
 
-  // Derive hand lengths and tick radius from the shorter half-dimension so the
-  // watchface scales correctly across basalt (144×168) and emery (200×228).
-  int half = (w < h ? w : h) / 2;
+  // Clock center: vertically centered between the two strips
+  GPoint center = GPoint(w / 2, TOP_H + (h - TOP_H - BOTTOM_H) / 2 - 2);
+
+  int half       = (w < h ? w : h) / 2;
   int minute_len = half * HAND_MINUTE_FRAC / 100;
   int hour_len   = half * HAND_HOUR_FRAC   / 100;
-  int tick_r     = half * TICK_R_FRAC      / 100;
+  int bottom_y   = h - BOTTOM_H;
 
-  // Background — white
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
-
-  // ── Tick marks ──────────────────────────────────────────────────────────
-  graphics_context_set_stroke_color(ctx, GColorBlack);
-  graphics_context_set_stroke_width(ctx, TICK_WIDTH);
-  for (int i = 0; i < 12; i++) {
-    int32_t tick_angle = i * TRIG_MAX_ANGLE / 12;
-    int32_t sin_a = sin_lookup(tick_angle);
-    int32_t cos_a = cos_lookup(tick_angle);
-    int tick_len = (i % 3 == 0) ? TICK_MAJOR_LEN : TICK_MINOR_LEN;
-    // Side ticks (2,3,4,8,9,10) snap to the left/right screen edges;
-    // the rest stay on the fixed circle.
-    bool is_side = (i == 2 || i == 3 || i == 4 || i == 8 || i == 9 || i == 10);
-    GPoint outer = is_side
-      ? rect_edge_point(center, sin_a, cos_a, w / 2 - 6)
-      : rect_edge_point(center, sin_a, cos_a, tick_r);
-    GPoint inner = rect_tick_inner(outer, center, tick_len);
-    graphics_draw_line(ctx, outer, inner);
-  }
-
-  // ── Angles ──────────────────────────────────────────────────────────────
   int32_t min_angle  = s_minutes * TRIG_MAX_ANGLE / 60;
   int32_t hour_angle = (s_hours % 12) * TRIG_MAX_ANGLE / 12
                        + s_minutes * TRIG_MAX_ANGLE / 720;
 
-  // ── Hour hand ───────────────────────────────────────────────────────────
+  // ── Background ────────────────────────────────────────────────────────
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+
+  // ── Hour hand ─────────────────────────────────────────────────────────
   draw_hand_border(ctx, center, hour_angle,
                    hour_len - EDGE_WIDTH / 2,
                    HOUR_OUTER_W / 2 - EDGE_WIDTH / 2,
@@ -190,7 +209,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_hand_fill(ctx, center, hour_angle,
                  hour_len - EDGE_WIDTH / 2 - 1, HOUR_INNER_W, GColorBlack);
 
-  // ── Minute hand (white halo separates it from tick marks on white bg) ────
+  // ── Minute hand ───────────────────────────────────────────────────────
   draw_hand_border(ctx, center, min_angle,
                    minute_len - EDGE_WIDTH / 2,
                    MINUTE_OUTER_W / 2 - EDGE_WIDTH / 2,
@@ -204,44 +223,43 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_hand_fill(ctx, center, min_angle,
                  minute_len - EDGE_WIDTH / 2 - 1, MINUTE_INNER_W, GColorBlack);
 
-  // ── Center pivot ─────────────────────────────────────────────────────────
+  // ── Center pivot ──────────────────────────────────────────────────────
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_circle(ctx, center, 3);
 
-  // ── Top-left: weather icon + temperature ─────────────────────────────────
+  // ── Ticks: drawn after hands so they appear on top ────────────────────
+  draw_all_ticks(ctx, center);
+
+  // ── Top-left: weather icon + temperature ─────────────────────────────
   if (Weather_currentWeatherIcon) {
     gdraw_command_image_recolor(Weather_currentWeatherIcon, GColorWhite, GColorBlack);
-    gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(2, 2));
+    gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(3, 3));
   }
   if (Weather_weatherInfo.currentTemp != INT32_MIN) {
-    char temp_str[8];
-    snprintf(temp_str, sizeof(temp_str), "%d°", Weather_weatherInfo.currentTemp);
+    char temp_str[6];
+    snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
     graphics_context_set_text_color(ctx, GColorBlack);
     graphics_draw_text(ctx, temp_str,
-                       fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                       GRect(30, 3, 60, 20),
+                       fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS),
+                       GRect(31, 3, 60, 24),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   }
 
-  // ── Top-right: vertical battery icon + percentage to its left ───────────
+  // ── Top-right: battery icon + percentage ─────────────────────────────
   BatteryChargeState bat = battery_state_service_peek();
   uint8_t pct = (bat.charge_percent > 0) ? bat.charge_percent : 5;
 
-  // Icon: nub at top, body below; right edge flush with screen minus 3px
-  int bat_x = w - BAT_W - 3;
-  int bat_y = 3;  // top padding
+  int bat_x = w - BAT_W - 4;
+  int bat_y = 3;
 
-  // Nub (terminal)
   int nub_x = bat_x + (BAT_W - BAT_NUB_W) / 2;
   graphics_context_set_fill_color(ctx, GColorBlack);
   graphics_fill_rect(ctx, GRect(nub_x, bat_y, BAT_NUB_W, BAT_NUB_H), 0, GCornerNone);
 
-  // Outer border
   graphics_context_set_stroke_color(ctx, GColorBlack);
   graphics_context_set_stroke_width(ctx, BAT_BORDER);
   graphics_draw_rect(ctx, GRect(bat_x, bat_y + BAT_NUB_H, BAT_W, BAT_H));
 
-  // Fill bar — grows from bottom up
   int fill_inner_h = BAT_H - 2 * BAT_BORDER;
   int fill_h = fill_inner_h * pct / 100;
   int fill_y = bat_y + BAT_NUB_H + BAT_BORDER + (fill_inner_h - fill_h);
@@ -258,38 +276,60 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                                   BAT_W - 2 * BAT_BORDER, fill_h), 0, GCornerNone);
   }
 
-  // Percentage text — right-aligned, left of the icon with a small gap
-  char bat_str[6];
-  snprintf(bat_str, sizeof(bat_str), "%d%%", pct);
+  char bat_str[4];
+  snprintf(bat_str, sizeof(bat_str), "%d", pct);
   graphics_context_set_text_color(ctx, GColorBlack);
   graphics_draw_text(ctx, bat_str,
-                     fonts_get_system_font(FONT_KEY_GOTHIC_18_BOLD),
-                     GRect(w - BAT_W - 3 - 4 - 46, 3, 44, 20),
+                     fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS),
+                     GRect(w - BAT_W - 4 - 4 - 50, 3, 48, 24),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
 
-  // ── Bottom-left: digital time ─────────────────────────────────────────────
+  // ── Bottom strip: time (left) and date (right) with custom dot seps ───
+  GFont leco36  = fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS);
+  int  strip_y  = h - BOTTOM_H;
+  int  text_h   = BOTTOM_H;
+
   graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, s_time_str,
-                     fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS),
-                     GRect(2, h - BOTTOM_H, w / 2 - 2, BOTTOM_H),
+
+  // Time — "HH" : "MM", left-aligned from x=3
+  int tx = 3;
+  graphics_draw_text(ctx, s_hours_str,   leco36,
+                     GRect(tx, strip_y, LECO36_PAIR_W, text_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  tx += LECO36_PAIR_W + DOT_GAP;
+  draw_colon(ctx, tx - 4, strip_y);
+  tx += DOT_SIZE + DOT_GAP;
+  graphics_draw_text(ctx, s_minutes_str, leco36,
+                     GRect(tx - 4, strip_y, LECO36_PAIR_W, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // ── Bottom-right: date ────────────────────────────────────────────────────
-  graphics_draw_text(ctx, s_date_str,
-                     fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS),
-                     GRect(w / 2, h - BOTTOM_H, w / 2 - 2, BOTTOM_H),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentRight, NULL);
+  // Date — "dd" . "mm" ., right-aligned to x=w−4
+  // Layout width: PAIR + GAP + DOT + GAP + PAIR + GAP + DOT
+  int date_w = LECO36_PAIR_W + DOT_GAP + DOT_SIZE + DOT_GAP
+             + LECO36_PAIR_W + DOT_GAP + DOT_SIZE;
+  int dx = w - 4 - date_w + 1;
+  graphics_draw_text(ctx, s_day_str,   leco36,
+                     GRect(dx + 1, strip_y, LECO36_PAIR_W, text_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  dx += LECO36_PAIR_W + DOT_GAP;
+  draw_period(ctx, dx - 1 + 1, strip_y - 1);
+  dx += DOT_SIZE + DOT_GAP;
+  graphics_draw_text(ctx, s_month_str, leco36,
+                     GRect(dx, strip_y, LECO36_PAIR_W, text_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  dx += LECO36_PAIR_W + DOT_GAP;
+  draw_period(ctx, dx - 1, strip_y - 1);
 }
 
 // ── Time update ───────────────────────────────────────────────────────────
 static void handle_tick(struct tm *tick_time, TimeUnits units_changed) {
   s_hours   = tick_time->tm_hour;
   s_minutes = tick_time->tm_min;
-  snprintf(s_time_str, sizeof(s_time_str), "%02d:%02d", s_hours, s_minutes);
-  snprintf(s_date_str, sizeof(s_date_str), "%d.%d.",
-           tick_time->tm_mday, tick_time->tm_mon + 1);
+  snprintf(s_hours_str,   sizeof(s_hours_str),   "%02d", tick_time->tm_hour);
+  snprintf(s_minutes_str, sizeof(s_minutes_str), "%02d", tick_time->tm_min);
+  snprintf(s_day_str,     sizeof(s_day_str),     "%02d", tick_time->tm_mday);
+  snprintf(s_month_str,   sizeof(s_month_str),   "%02d", tick_time->tm_mon + 1);
 
-  // Request weather update every hour
   if (units_changed & HOUR_UNIT) {
     messaging_requestNewWeatherData();
   }
@@ -316,33 +356,22 @@ static void window_load(Window *window) {
   layer_set_update_proc(s_canvas_layer, canvas_update_proc);
   layer_add_child(root, s_canvas_layer);
 
-  // Init weather (loads from persistent storage if available)
   Weather_init();
-
-  // Init messaging
   messaging_init(on_message_received);
-
-  // Register battery handler
   battery_state_service_subscribe(on_battery_state_changed);
-
-  // Register tick handler (every minute)
   tick_timer_service_subscribe(MINUTE_UNIT | HOUR_UNIT, handle_tick);
 
-  // Set initial time
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   handle_tick(t, MINUTE_UNIT | HOUR_UNIT);
 
-  // Request initial weather
   messaging_requestNewWeatherData();
 }
 
 static void window_unload(Window *window) {
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
-
   Weather_deinit();
-
   layer_destroy(s_canvas_layer);
 }
 
