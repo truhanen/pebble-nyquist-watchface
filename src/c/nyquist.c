@@ -31,14 +31,14 @@
 #define WATCHFACE_CENTER_Y      107   // tweak this single y-coordinate to move the layout
 
 // ── Corner group offsets (gap from screen corner to group corner) ──────────
-#define TOP_LEFT_GROUP_OFFSET_X       5   // top-left corner to weather text group
-#define TOP_LEFT_GROUP_OFFSET_Y       4   // top-left corner to weather text group
-#define TOP_RIGHT_GROUP_OFFSET_X      5   // top-right corner to battery group
-#define TOP_RIGHT_GROUP_OFFSET_Y      4   // top-right corner to battery group
+#define TOP_LEFT_GROUP_OFFSET_X       4   // top-left corner to weather text group
+#define TOP_LEFT_GROUP_OFFSET_Y       1   // top-left corner to weather text group
+#define TOP_RIGHT_GROUP_OFFSET_X      4   // top-right corner to battery group
+#define TOP_RIGHT_GROUP_OFFSET_Y      1   // top-right corner to battery group
 #define BOTTOM_LEFT_GROUP_OFFSET_X    4   // bottom-left corner to time group
-#define BOTTOM_LEFT_GROUP_OFFSET_Y    4   // bottom-left corner to time group
-#define BOTTOM_RIGHT_GROUP_OFFSET_X   3   // bottom-right corner to date group
-#define BOTTOM_RIGHT_GROUP_OFFSET_Y   4   // bottom-right corner to date group
+#define BOTTOM_LEFT_GROUP_OFFSET_Y    3   // bottom-left corner to time group
+#define BOTTOM_RIGHT_GROUP_OFFSET_X   4   // bottom-right corner to date group
+#define BOTTOM_RIGHT_GROUP_OFFSET_Y   3   // bottom-right corner to date group
 
 // ── Font metric correction offsets (compensate for internal font padding) ─
 #define TOP_CORNER_VERTICAL_CORRECTION     (-5)  // top corner content is this many px too low
@@ -46,7 +46,7 @@
 #define LECO32_BOX_TO_GLYPH_BASELINE_OFFSET  6    // LECO_32 glyph bottom baseline offset from the text box bottom baseline
 
 // ── Bottom strip layout ───────────────────────────────────────────────────
-#define BOTTOM_STRIP_TEXT_WIDTH_LIMIT      40   // max width budget for two LECO_32 digits
+#define BOTTOM_STRIP_TEXT_WIDTH_LIMIT      48   // max width budget for two Bitham 30 digits
 #define BOTTOM_STRIP_SEPARATOR_WIDTH        6   // separator column width
 
 static Window *s_window;
@@ -241,18 +241,18 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   draw_all_ticks(ctx, center);
 
   // ── Top-left: temperature above, weather icon below ──────────────────
-  GFont leco26 = fonts_get_system_font(FONT_KEY_LECO_26_BOLD_NUMBERS_AM_PM);
+  GFont bitham30_corner = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
   int corner_text_h = 30; // measure budget
   if (Weather_weatherInfo.currentTemp != INT32_MIN) {
     char temp_str[6];
     snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
-    GSize sz_temp = graphics_text_layout_get_content_size(temp_str, leco26,
+    GSize sz_temp = graphics_text_layout_get_content_size(temp_str, bitham30_corner,
       GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
     int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;
     int top_left_group_y = TOP_LEFT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
     int top_left_group_icon_y = top_left_group_y + sz_temp.h + 4;
     graphics_context_set_text_color(ctx, GColorBlack);
-    graphics_draw_text(ctx, temp_str, leco26,
+    graphics_draw_text(ctx, temp_str, bitham30_corner,
                        GRect(top_left_group_x, top_left_group_y, sz_temp.w + 2, corner_text_h),
                        GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
     if (Weather_currentWeatherIcon) {
@@ -272,7 +272,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   char bat_str[4];
   snprintf(bat_str, sizeof(bat_str), "%d", pct);
-  GSize sz_bat = graphics_text_layout_get_content_size(bat_str, leco26,
+  GSize sz_bat = graphics_text_layout_get_content_size(bat_str, bitham30_corner,
     GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   int top_right_group_right = w - TOP_RIGHT_GROUP_OFFSET_X;
   int top_right_group_y = TOP_RIGHT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
@@ -313,18 +313,18 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   }
 
   graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, bat_str, leco26,
+  graphics_draw_text(ctx, bat_str, bitham30_corner,
                      GRect(bat_text_x, top_right_group_y, sz_bat.w + 2, corner_text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   // ── Bottom strip: time (left) and date (right) ────────────────────────
-  GFont leco36 = fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS);
+  GFont bitham30_strip = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
   int text_h   = h - WATCHFACE_CENTER_Y;
 
   graphics_context_set_text_color(ctx, GColorBlack);
 
   // Measure hours first to derive strip_text_y from bottom gap
-  GSize sz_hours = graphics_text_layout_get_content_size(s_hours_str, leco36,
+  GSize sz_hours = graphics_text_layout_get_content_size(s_hours_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   int strip_group_bottom_left = h - BOTTOM_LEFT_GROUP_OFFSET_Y;
   int strip_group_bottom_right = h - BOTTOM_RIGHT_GROUP_OFFSET_Y;
@@ -332,32 +332,32 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   // Time: HH : MM
   int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
-  graphics_draw_text(ctx, s_hours_str, leco36,
+  graphics_draw_text(ctx, s_hours_str, bitham30_strip,
                      GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  tx += sz_hours.w + 1;
+  tx += sz_hours.w + 2;
   int colon_center_y = strip_text_y + sz_hours.h / 2 + 5;
   draw_sep_colon(ctx, tx, colon_center_y);
   tx += BOTTOM_STRIP_SEPARATOR_WIDTH;
-  graphics_draw_text(ctx, s_minutes_str, leco36,
+  graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
                      GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
   // Date: DD . MM, right-aligned — measure from right edge inward
-  GSize sz_month = graphics_text_layout_get_content_size(s_month_str, leco36,
+  GSize sz_month = graphics_text_layout_get_content_size(s_month_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, leco36,
+  GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
 
   int dx = w - BOTTOM_RIGHT_GROUP_OFFSET_X - sz_month.w;
   int date_text_y = strip_group_bottom_right - sz_month.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
-  graphics_draw_text(ctx, s_month_str, leco36,
+  graphics_draw_text(ctx, s_month_str, bitham30_strip,
                      GRect(dx, date_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
   dx -= BOTTOM_STRIP_SEPARATOR_WIDTH;
   draw_sep_period(ctx, dx, strip_group_bottom_right - LECO32_BOX_TO_GLYPH_BASELINE_OFFSET);
   dx -= sz_day.w + 1;
-  graphics_draw_text(ctx, s_day_str, leco36,
+  graphics_draw_text(ctx, s_day_str, bitham30_strip,
                      GRect(dx, date_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
