@@ -29,7 +29,8 @@
       "ShowTopRight",
       "ShowBottomLeft",
       "ShowBottomRight",
-      "InvertColors"
+      "InvertColors",
+      "TimeFormat24h"
     ],
     "resources": {
       "media": [

@@ -65,8 +65,9 @@ static Window *s_window;
 static Layer  *s_canvas_layer;
 
 static int  s_hours, s_minutes;
-static char s_hours_str[3];
+static char s_hours_str[4];
 static char s_minutes_str[3];
+static char s_meridiem_str[3];
 static char s_day_str[3];
 static char s_month_str[4];
 
@@ -431,8 +432,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
     int strip_group_bottom_right = h - BOTTOM_RIGHT_GROUP_OFFSET_Y;
     int strip_text_y = strip_group_bottom_left - sz_hours.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
 
-    // Time: HH : MM
+    // Time: HH : MM with optional am/pm suffix (no space)
     if (show_bottom_left) {
+      GSize sz_minutes = graphics_text_layout_get_content_size(s_minutes_str, bitham30_strip,
+        GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
       int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
       graphics_draw_text(ctx, s_hours_str, bitham30_strip,
                          GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
@@ -444,6 +447,12 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
       graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
                          GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                          GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      if (s_meridiem_str[0] != '\0') {
+        tx += sz_minutes.w;
+        graphics_draw_text(ctx, s_meridiem_str, bitham30_strip,
+                           GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                           GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      }
     }
 
     // Date: two-line block, right-aligned (day over month abbreviation)
@@ -476,7 +485,17 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 static void handle_tick(struct tm *tick_time, TimeUnits units_changed) {
   s_hours   = tick_time->tm_hour;
   s_minutes = tick_time->tm_min;
-  snprintf(s_hours_str,   sizeof(s_hours_str),   "%02d", tick_time->tm_hour);
+  bool use_24h = messaging_time_format_24h();
+  int display_hour = tick_time->tm_hour;
+  if (use_24h) {
+    snprintf(s_hours_str, sizeof(s_hours_str), "%02d", display_hour);
+    s_meridiem_str[0] = '\0';
+  } else {
+    display_hour = tick_time->tm_hour % 12;
+    if (display_hour == 0) display_hour = 12;
+    snprintf(s_hours_str, sizeof(s_hours_str), "%d", display_hour);
+    snprintf(s_meridiem_str, sizeof(s_meridiem_str), "%s", tick_time->tm_hour >= 12 ? "pm" : "am");
+  }
   snprintf(s_minutes_str, sizeof(s_minutes_str), "%02d", tick_time->tm_min);
   snprintf(s_day_str,     sizeof(s_day_str),     "%d", tick_time->tm_mday);
   static const char *month_abbrevs[12] = {
@@ -494,7 +513,9 @@ static void handle_tick(struct tm *tick_time, TimeUnits units_changed) {
 
 // ── Messaging callback ─────────────────────────────────────────────────────
 static void on_message_received(void) {
-  layer_mark_dirty(s_canvas_layer);
+  time_t now = time(NULL);
+  struct tm *t = localtime(&now);
+  handle_tick(t, 0);
 }
 
 // ── Battery callback ──────────────────────────────────────────────────────

@@ -12,7 +12,8 @@ function loadSettings() {
     ShowTopRight: window.localStorage.getItem('ShowTopRight') !== '0',
     ShowBottomLeft: window.localStorage.getItem('ShowBottomLeft') !== '0',
     ShowBottomRight: window.localStorage.getItem('ShowBottomRight') !== '0',
-    InvertColors: window.localStorage.getItem('InvertColors') === '1'
+    InvertColors: window.localStorage.getItem('InvertColors') === '1',
+    TimeFormat24h: window.localStorage.getItem('TimeFormat24h') !== '0'
   };
 }
 
@@ -22,6 +23,7 @@ function saveSettings(settings) {
   window.localStorage.setItem('ShowBottomLeft', settings.ShowBottomLeft ? '1' : '0');
   window.localStorage.setItem('ShowBottomRight', settings.ShowBottomRight ? '1' : '0');
   window.localStorage.setItem('InvertColors', settings.InvertColors ? '1' : '0');
+  window.localStorage.setItem('TimeFormat24h', settings.TimeFormat24h ? '1' : '0');
 }
 
 function sendSettingsToWatch(settings) {
@@ -30,7 +32,8 @@ function sendSettingsToWatch(settings) {
     ShowTopRight: settings.ShowTopRight ? 1 : 0,
     ShowBottomLeft: settings.ShowBottomLeft ? 1 : 0,
     ShowBottomRight: settings.ShowBottomRight ? 1 : 0,
-    InvertColors: settings.InvertColors ? 1 : 0
+    InvertColors: settings.InvertColors ? 1 : 0,
+    TimeFormat24h: settings.TimeFormat24h ? 1 : 0
   });
 }
 
@@ -71,6 +74,10 @@ function buildConfigPageHtml(isGabbro, settings) {
     '<div class=\"card\">' +
     '<label class=\"item\"><span>Invert black/white</span><span class=\"switch\"><input id=\"InvertColors\" type=\"checkbox\"><span class=\"slider\"></span></span></label>' +
     '</div>' +
+    '<h3>Time</h3>' +
+    '<div class=\"card\">' +
+    '<label class=\"item\"><span>Use 24-hour format</span><span class=\"switch\"><input id=\"TimeFormat24h\" type=\"checkbox\"><span class=\"slider\"></span></span></label>' +
+    '</div>' +
     '<div class=\"actions\"><button id=\"save\">Save</button></div>' +
     '</div>' +
     '<script>' +
@@ -78,8 +85,9 @@ function buildConfigPageHtml(isGabbro, settings) {
     'var s=' + JSON.stringify(settings) + ';' +
     'if(!isGabbro){document.getElementById(\"ShowTopLeft\").checked=s.ShowTopLeft;document.getElementById(\"ShowTopRight\").checked=s.ShowTopRight;document.getElementById(\"ShowBottomLeft\").checked=s.ShowBottomLeft;document.getElementById(\"ShowBottomRight\").checked=s.ShowBottomRight;}' +
     'document.getElementById(\"InvertColors\").checked=s.InvertColors;' +
+    'document.getElementById(\"TimeFormat24h\").checked=s.TimeFormat24h;' +
     'document.getElementById(\"save\").onclick=function(){' +
-      'var out={InvertColors:document.getElementById(\"InvertColors\").checked};' +
+      'var out={InvertColors:document.getElementById(\"InvertColors\").checked,TimeFormat24h:document.getElementById(\"TimeFormat24h\").checked};' +
       'if(!isGabbro){out.ShowTopLeft=document.getElementById(\"ShowTopLeft\").checked;out.ShowTopRight=document.getElementById(\"ShowTopRight\").checked;out.ShowBottomLeft=document.getElementById(\"ShowBottomLeft\").checked;out.ShowBottomRight=document.getElementById(\"ShowBottomRight\").checked;}' +
       'location.href=\"pebblejs://close#\"+encodeURIComponent(JSON.stringify(out));};' +
     '</script></body></html>';
@@ -113,6 +121,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
   if (typeof data.ShowBottomLeft === 'boolean') settings.ShowBottomLeft = data.ShowBottomLeft;
   if (typeof data.ShowBottomRight === 'boolean') settings.ShowBottomRight = data.ShowBottomRight;
   if (typeof data.InvertColors === 'boolean') settings.InvertColors = data.InvertColors;
+  if (typeof data.TimeFormat24h === 'boolean') settings.TimeFormat24h = data.TimeFormat24h;
   saveSettings(settings);
   sendSettingsToWatch(settings);
 });
