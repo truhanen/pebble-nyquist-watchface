@@ -2,22 +2,38 @@
 #include "weather.h"
 #include "messaging.h"
 
-// ── Hand drawing parameters ────────────────────────────────────────────────
-#define HAND_EDGE_WIDTH          12   // thickness of the hand outline
-#define HAND_HALO_WIDTH           2   // width of the black halo behind the hands
-#define MINUTE_HAND_OUTER_WIDTH  (2 * HAND_EDGE_WIDTH)
-#define MINUTE_HAND_INNER_WIDTH  HAND_EDGE_WIDTH
-#define HOUR_HAND_OUTER_WIDTH    ((MINUTE_HAND_OUTER_WIDTH * 5) / 3 - 3)
-#define HOUR_HAND_INNER_WIDTH    (HOUR_HAND_OUTER_WIDTH - HAND_EDGE_WIDTH)
-#define HAND_TAIL_LENGTH         (HOUR_HAND_OUTER_WIDTH / 2)
-#define TICK_WIDTH                2   // width of each tick mark
-#define TICK_HALO_WIDTH           6   // width of the tick halo stroke
-#define TICK_LENGTH               6   // length of each tick mark
-#define TICK_RADIUS              85   // radius at which ticks are drawn
+// ── Clock dimensions: Emery set ───────────────────────────────────────────
+#define EMERY_WATCHFACE_CENTER_Y             112  // Clock center Y position on Emery
+#define EMERY_TICK_RADIUS                     85  // Tick ring radius in pixels
+#define EMERY_MINUTE_HAND_LENGTH_PERCENT      89  // Minute hand length as % of half-screen
+#define EMERY_HOUR_HAND_LENGTH_PERCENT        60  // Hour hand length as % of half-screen
+#define EMERY_HAND_EDGE_WIDTH                 12  // Base hand stroke width
+#define EMERY_HAND_HALO_WIDTH                  2  // Halo stroke width around hands
+#define EMERY_MINUTE_HAND_OUTER_WIDTH         24  // Minute hand outer polygon width
+#define EMERY_MINUTE_HAND_FILL_WIDTH          12  // Minute hand filled body width
+#define EMERY_HOUR_HAND_OUTER_WIDTH           33  // Hour hand outer polygon width
+#define EMERY_HOUR_HAND_FILL_WIDTH            22  // Hour hand filled body width
+#define EMERY_HAND_TAIL_LENGTH                18  // Tail length behind hand pivot
+#define EMERY_TICK_WIDTH                       2  // Tick body stroke width
+#define EMERY_TICK_HALO_WIDTH                  6  // Tick halo stroke width
+#define EMERY_TICK_LENGTH                      6  // Tick length toward center
+#define EMERY_PIVOT_RADIUS                     3  // Center pivot circle radius
 
-// Hand lengths as percent of the shorter screen half-dimension
-#define MINUTE_HAND_LENGTH_PERCENT  89
-#define HOUR_HAND_LENGTH_PERCENT    60
+// ── Clock dimensions: Gabbro set ──────────────────────────────────────────
+#define GABBRO_TICK_RADIUS_PERCENT            84  // Tick radius as % of round-screen half-size
+#define GABBRO_MINUTE_HAND_LENGTH_PERCENT    104  // Minute hand length as % of gabbro tick radius
+#define GABBRO_HOUR_HAND_LENGTH_PERCENT       60  // Hour hand length as % of gabbro tick radius
+#define GABBRO_HAND_EDGE_WIDTH                11  // Base hand stroke width
+#define GABBRO_HAND_HALO_WIDTH                 2  // Halo stroke width around hands
+#define GABBRO_MINUTE_HAND_OUTER_WIDTH        26  // Minute hand outer polygon width
+#define GABBRO_MINUTE_HAND_FILL_WIDTH         13  // Minute hand filled body width
+#define GABBRO_HOUR_HAND_OUTER_WIDTH          38  // Hour hand outer polygon width
+#define GABBRO_HOUR_HAND_FILL_WIDTH           26  // Hour hand filled body width
+#define GABBRO_HAND_TAIL_LENGTH               16  // Tail length behind hand pivot
+#define GABBRO_TICK_WIDTH                      2  // Tick body stroke width
+#define GABBRO_TICK_HALO_WIDTH                 7  // Tick halo stroke width
+#define GABBRO_TICK_LENGTH                     8  // Tick length toward center
+#define GABBRO_PIVOT_RADIUS                    3  // Center pivot circle radius
 
 // ── Vertical battery icon dimensions ──────────────────────────────────────
 #define BATTERY_ICON_WIDTH        14   // outer width of the battery icon
@@ -26,9 +42,6 @@
 #define BATTERY_ICON_NUB_HEIGHT    3   // height of the battery nub
 #define BATTERY_ICON_BORDER        2   // white border thickness inside the icon
 #define BATTERY_ICON_FILL_GAP      2   // inset gap around the fill inside the icon
-
-// ── UI layout ──────────────────────────────────────────────────────────────
-#define WATCHFACE_CENTER_Y      112   // tweak this single y-coordinate to move the layout
 
 // ── Corner group offsets (gap from screen corner to group corner) ──────────
 #define TOP_LEFT_GROUP_OFFSET_X       4   // top-left corner to weather text group
@@ -91,27 +104,27 @@ static GPoint tick_inner(GPoint outer, GPoint center, int tick_len) {
 }
 
 // ── Draw all 12 tick marks: white halo, black body, fixed radius ──────────
-static void draw_all_ticks(GContext *ctx, GPoint center, GColor halo_color, GColor body_color) {
+static void draw_all_ticks(GContext *ctx, GPoint center, int tick_r, int tick_len,
+                           int tick_halo_width, int tick_width,
+                           GColor halo_color, GColor body_color) {
   for (int i = 0; i < 12; i++) {
     int32_t angle = i * TRIG_MAX_ANGLE / 12;
     int32_t sin_a = sin_lookup(angle);
     int32_t cos_a = cos_lookup(angle);
 
-    int tick_r = TICK_RADIUS;
-
     GPoint outer = {
       center.x + (int32_t)((int64_t)sin_a * tick_r / TRIG_MAX_RATIO),
       center.y - (int32_t)((int64_t)cos_a * tick_r / TRIG_MAX_RATIO),
     };
-    GPoint inner = tick_inner(outer, center, TICK_LENGTH);
+    GPoint inner = tick_inner(outer, center, tick_len);
 
     // halo
     graphics_context_set_stroke_color(ctx, halo_color);
-    graphics_context_set_stroke_width(ctx, TICK_HALO_WIDTH);
+    graphics_context_set_stroke_width(ctx, tick_halo_width);
     graphics_draw_line(ctx, outer, inner);
     // body
     graphics_context_set_stroke_color(ctx, body_color);
-    graphics_context_set_stroke_width(ctx, TICK_WIDTH);
+    graphics_context_set_stroke_width(ctx, tick_width);
     graphics_draw_line(ctx, outer, inner);
   }
 }
@@ -213,10 +226,10 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
 
 // ── Draws the filled pentagon body of a hand ──────────────────────────────
 static void draw_hand_fill(GContext *ctx, GPoint center, int32_t angle,
-                           int length, int width, GColor color) {
+                           int length, int width, int tail, GColor color) {
   int hw = width / 2;
   GPoint pts[5] = {
-    {-hw, HAND_TAIL_LENGTH}, {hw, HAND_TAIL_LENGTH}, {hw, -length}, {0, -(length + hw)}, {-hw, -length}
+    {-hw, tail}, {hw, tail}, {hw, -length}, {0, -(length + hw)}, {-hw, -length}
   };
   GPathInfo info = { .num_points = 5, .points = pts };
   GPath *path = gpath_create(&info);
@@ -250,13 +263,40 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   GColor bg = invert_colors ? GColorBlack : GColorWhite;
   GColor fg = invert_colors ? GColorWhite : GColorBlack;
   GColor minute_halo = bg;
+#if defined(PBL_PLATFORM_GABBRO)
+  const bool is_gabbro = true;
+#else
+  const bool is_gabbro = false;
+#endif
+  bool show_top_left = !is_gabbro && messaging_show_top_left();
+  bool show_top_right = !is_gabbro && messaging_show_top_right();
+  bool show_bottom_left = !is_gabbro && messaging_show_bottom_left();
+  bool show_bottom_right = !is_gabbro && messaging_show_bottom_right();
 
   // Clock center: shifted upward from vertical center between strips
-  GPoint center = GPoint(w / 2, WATCHFACE_CENTER_Y);
+  GPoint center = is_gabbro ? GPoint(w / 2, h / 2) : GPoint(w / 2, EMERY_WATCHFACE_CENTER_Y);
 
-  int half       = (w < h ? w : h) / 2;
-  int minute_len = half * MINUTE_HAND_LENGTH_PERCENT / 100;
-  int hour_len   = half * HOUR_HAND_LENGTH_PERCENT   / 100;
+  int half = (w < h ? w : h) / 2;
+  int tick_r = is_gabbro
+    ? ((half * GABBRO_TICK_RADIUS_PERCENT + 50) / 100)
+    : EMERY_TICK_RADIUS;
+  int minute_len = is_gabbro
+    ? (tick_r * GABBRO_MINUTE_HAND_LENGTH_PERCENT / 100)
+    : (half * EMERY_MINUTE_HAND_LENGTH_PERCENT / 100);
+  int hour_len = is_gabbro
+    ? (tick_r * GABBRO_HOUR_HAND_LENGTH_PERCENT / 100)
+    : (half * EMERY_HOUR_HAND_LENGTH_PERCENT / 100);
+  int hand_edge_w = is_gabbro ? GABBRO_HAND_EDGE_WIDTH : EMERY_HAND_EDGE_WIDTH;
+  int hand_halo_w = is_gabbro ? GABBRO_HAND_HALO_WIDTH : EMERY_HAND_HALO_WIDTH;
+  int minute_outer_w = is_gabbro ? GABBRO_MINUTE_HAND_OUTER_WIDTH : EMERY_MINUTE_HAND_OUTER_WIDTH;
+  int minute_fill_w = is_gabbro ? GABBRO_MINUTE_HAND_FILL_WIDTH : EMERY_MINUTE_HAND_FILL_WIDTH;
+  int hour_outer_w = is_gabbro ? GABBRO_HOUR_HAND_OUTER_WIDTH : EMERY_HOUR_HAND_OUTER_WIDTH;
+  int hour_fill_w = is_gabbro ? GABBRO_HOUR_HAND_FILL_WIDTH : EMERY_HOUR_HAND_FILL_WIDTH;
+  int hand_tail = is_gabbro ? GABBRO_HAND_TAIL_LENGTH : EMERY_HAND_TAIL_LENGTH;
+  int tick_w = is_gabbro ? GABBRO_TICK_WIDTH : EMERY_TICK_WIDTH;
+  int tick_halo_w = is_gabbro ? GABBRO_TICK_HALO_WIDTH : EMERY_TICK_HALO_WIDTH;
+  int tick_len = is_gabbro ? GABBRO_TICK_LENGTH : EMERY_TICK_LENGTH;
+  int pivot_r = is_gabbro ? GABBRO_PIVOT_RADIUS : EMERY_PIVOT_RADIUS;
 
   int32_t min_angle  = s_minutes * TRIG_MAX_ANGLE / 60;
   int32_t hour_angle = (s_hours % 12) * TRIG_MAX_ANGLE / 12
@@ -268,38 +308,38 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
 
   // ── Hour hand ─────────────────────────────────────────────────────────
   draw_hand_border(ctx, center, hour_angle,
-                   hour_len - HAND_EDGE_WIDTH / 2,
-                   HOUR_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HOUR_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, fg);
+                   hour_len - hand_edge_w / 2,
+                   hour_outer_w / 2 - hand_edge_w / 2,
+                   hour_outer_w / 2 - hand_edge_w / 2,
+                   hand_tail, hand_edge_w, fg);
   draw_hand_fill(ctx, center, hour_angle,
-                 hour_len - HAND_EDGE_WIDTH / 2 - 1, HOUR_HAND_INNER_WIDTH, fg);
+                 hour_len - hand_edge_w / 2 - 1, hour_fill_w, hand_tail, fg);
 
   // ── Minute hand ───────────────────────────────────────────────────────
   draw_hand_border(ctx, center, min_angle,
-                   minute_len - HAND_EDGE_WIDTH / 2,
-                   MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH + 2 * HAND_HALO_WIDTH, minute_halo);
+                   minute_len - hand_edge_w / 2,
+                   minute_outer_w / 2 - hand_edge_w / 2,
+                   minute_outer_w / 2 - hand_edge_w / 2,
+                   hand_tail, hand_edge_w + 2 * hand_halo_w, minute_halo);
   draw_hand_border(ctx, center, min_angle,
-                   minute_len - HAND_EDGE_WIDTH / 2,
-                   MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, fg);
+                   minute_len - hand_edge_w / 2,
+                   minute_outer_w / 2 - hand_edge_w / 2,
+                   minute_outer_w / 2 - hand_edge_w / 2,
+                   hand_tail, hand_edge_w, fg);
   draw_hand_fill(ctx, center, min_angle,
-                 minute_len - HAND_EDGE_WIDTH / 2 - 1, MINUTE_HAND_INNER_WIDTH, fg);
+                 minute_len - hand_edge_w / 2 - 1, minute_fill_w, hand_tail, fg);
 
   // ── Center pivot ──────────────────────────────────────────────────────
   graphics_context_set_fill_color(ctx, bg);
-  graphics_fill_circle(ctx, center, 3);
+  graphics_fill_circle(ctx, center, pivot_r);
 
   // ── Ticks: drawn after hands so they appear on top ────────────────────
-  draw_all_ticks(ctx, center, bg, fg);
+  draw_all_ticks(ctx, center, tick_r, tick_len, tick_halo_w, tick_w, bg, fg);
 
   // ── Top-left: temperature above, weather icon below ──────────────────
   GFont bitham30_corner = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
   int corner_text_h = 30; // measure budget
-  if (messaging_show_top_left()) {
+  if (show_top_left) {
     if (Weather_weatherInfo.currentTemp != INT32_MIN) {
       char temp_str[6];
       snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
@@ -328,7 +368,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   BatteryChargeState bat = battery_state_service_peek();
   uint8_t pct = (bat.charge_percent > 0) ? bat.charge_percent : 5;
 
-  if (messaging_show_top_right()) {
+  if (show_top_right) {
     char bat_str[4];
     snprintf(bat_str, sizeof(bat_str), "%d", pct);
     GSize sz_bat = graphics_text_layout_get_content_size(bat_str, bitham30_corner,
@@ -378,55 +418,57 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   }
 
   // ── Bottom strip: time (left) and date (right) ────────────────────────
-  GFont bitham30_strip = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
-  int text_h   = h - WATCHFACE_CENTER_Y;
+  if (show_bottom_left || show_bottom_right) {
+    GFont bitham30_strip = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
+    int text_h   = h - EMERY_WATCHFACE_CENTER_Y;
 
-  graphics_context_set_text_color(ctx, fg);
+    graphics_context_set_text_color(ctx, fg);
 
-  // Measure hours first to derive strip_text_y from bottom gap
-  GSize sz_hours = graphics_text_layout_get_content_size(s_hours_str, bitham30_strip,
-    GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  int strip_group_bottom_left = h - BOTTOM_LEFT_GROUP_OFFSET_Y;
-  int strip_group_bottom_right = h - BOTTOM_RIGHT_GROUP_OFFSET_Y;
-  int strip_text_y = strip_group_bottom_left - sz_hours.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
+    // Measure hours first to derive strip_text_y from bottom gap
+    GSize sz_hours = graphics_text_layout_get_content_size(s_hours_str, bitham30_strip,
+      GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    int strip_group_bottom_left = h - BOTTOM_LEFT_GROUP_OFFSET_Y;
+    int strip_group_bottom_right = h - BOTTOM_RIGHT_GROUP_OFFSET_Y;
+    int strip_text_y = strip_group_bottom_left - sz_hours.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
 
-  // Time: HH : MM
-  if (messaging_show_bottom_left()) {
-    int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
-    graphics_draw_text(ctx, s_hours_str, bitham30_strip,
-                       GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    tx += sz_hours.w + 2;
-    int colon_center_y = strip_text_y + sz_hours.h / 2 + 5;
-    draw_sep_colon(ctx, tx, colon_center_y, fg);
-    tx += BOTTOM_STRIP_SEPARATOR_WIDTH;
-    graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
-                       GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  }
+    // Time: HH : MM
+    if (show_bottom_left) {
+      int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
+      graphics_draw_text(ctx, s_hours_str, bitham30_strip,
+                         GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      tx += sz_hours.w + 2;
+      int colon_center_y = strip_text_y + sz_hours.h / 2 + 5;
+      draw_sep_colon(ctx, tx, colon_center_y, fg);
+      tx += BOTTOM_STRIP_SEPARATOR_WIDTH;
+      graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
+                         GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
 
-  // Date: two-line block, right-aligned (day over month abbreviation)
-  GSize sz_month = graphics_text_layout_get_content_size(s_month_str, bitham30_strip,
-    GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, bitham30_strip,
-    GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    // Date: two-line block, right-aligned (day over month abbreviation)
+    GSize sz_month = graphics_text_layout_get_content_size(s_month_str, bitham30_strip,
+      GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, bitham30_strip,
+      GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
 
-  if (messaging_show_bottom_right()) {
-    int date_right = w - BOTTOM_RIGHT_GROUP_OFFSET_X;
-    int date_gap_y = -5;
-    int date_block_h = sz_day.h + date_gap_y + sz_month.h;
-    int day_y = strip_group_bottom_right - date_block_h + BOTTOM_STRIP_VERTICAL_CORRECTION;
-    int month_y = day_y + sz_day.h + date_gap_y;
+    if (show_bottom_right) {
+      int date_right = w - BOTTOM_RIGHT_GROUP_OFFSET_X;
+      int date_gap_y = -5;
+      int date_block_h = sz_day.h + date_gap_y + sz_month.h;
+      int day_y = strip_group_bottom_right - date_block_h + BOTTOM_STRIP_VERTICAL_CORRECTION;
+      int month_y = day_y + sz_day.h + date_gap_y;
 
-    int day_x = date_right - sz_day.w;
-    graphics_draw_text(ctx, s_day_str, bitham30_strip,
-                       GRect(day_x, day_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      int day_x = date_right - sz_day.w;
+      graphics_draw_text(ctx, s_day_str, bitham30_strip,
+                         GRect(day_x, day_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-    int month_x = date_right - sz_month.w;
-    graphics_draw_text(ctx, s_month_str, bitham30_strip,
-                       GRect(month_x, month_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      int month_x = date_right - sz_month.w;
+      graphics_draw_text(ctx, s_month_str, bitham30_strip,
+                         GRect(month_x, month_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    }
   }
 }
 

@@ -6,12 +6,19 @@ build:
 install_cloudpebble:
 	pebble install --cloudpebble
 
-.PHONY: install_emulator
-install_emulator:
+.PHONY: install_emulator_emery
+install_emulator_emery:
 	pebble install --emulator=emery
 
-.PHONY: build_and_install_emulator
-build_and_install_emulator: build install_emulator
+.PHONY: install_emulator_gabbro
+install_emulator_gabbro:
+	pebble install --emulator=gabbro
+
+.PHONY: build_and_install_emulator_emery
+build_and_install_emulator_emery: build install_emulator_emery
+
+.PHONY: build_and_install_emulator_gabbro
+build_and_install_emulator_gabbro: build install_emulator_gabbro
 
 .PHONY: build_and_install_cloudpebble
 build_and_install_cloudpebble: build install_cloudpebble
@@ -21,11 +28,19 @@ kill_emulator:
 	-pebble kill
 	pebble wipe
 
-.PHONY: start_emulator_with_logs
-start_emulator_with_logs: kill_emulator
+.PHONY: start_emulator_with_logs_emery
+start_emulator_with_logs_emery: kill_emulator
 	pebble logs --emulator=emery
 
-.PHONY: create_minute_screenshots
-create_minute_screenshots: kill_emulator build install_emulator
+.PHONY: start_emulator_with_logs_gabbro
+start_emulator_with_logs_gabbro: kill_emulator
+	pebble logs --emulator=gabbro
+
+.PHONY: create_minute_screenshots_emery
+create_minute_screenshots_emery: kill_emulator build install_emulator_emery
+	./scripts/capture-0000-0059.sh
+
+.PHONY: create_minute_screenshots_gabbro
+create_minute_screenshots_gabbro: kill_emulator build install_emulator_gabbro
 	./scripts/capture-0000-0059.sh
 

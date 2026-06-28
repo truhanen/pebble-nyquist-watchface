@@ -4,16 +4,15 @@
   "version": "1.0.0",
   "keywords": ["analog", "big"],
   "private": true,
-  "dependencies": {
-    "pebble-clay": "*"
-  },
+  "dependencies": {},
   "pebble": {
     "displayName": "Nyquist",
     "uuid": "0fd5dc09-2fc7-4037-a0b4-36beffbd3b2b",
     "sdkVersion": "3",
     "enableMultiJS": true,
     "targetPlatforms": [
-      "emery"
+      "emery",
+      "gabbro"
     ],
     "capabilities": ["location", "configurable"],
     "watchapp": {
