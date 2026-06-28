@@ -71,6 +71,13 @@ static char s_meridiem_str[3];
 static char s_day_str[3];
 static char s_month_str[4];
 
+static int prv_temperature_for_display(int temp_c) {
+  if (!messaging_use_fahrenheit()) {
+    return temp_c;
+  }
+  return temp_c * 9 / 5 + 32;
+}
+
 // ── Recolor PDC image ─────────────────────────────────────────────────────
 static bool prv_recolor_cb(GDrawCommand *cmd, uint32_t index, void *ctx) {
   GColor *c = (GColor *)ctx;
@@ -342,8 +349,9 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   int corner_text_h = 30; // measure budget
   if (show_top_left) {
     if (Weather_weatherInfo.currentTemp != INT32_MIN) {
-      char temp_str[6];
-      snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
+      int temp_display = prv_temperature_for_display(Weather_weatherInfo.currentTemp);
+      char temp_str[12];
+      snprintf(temp_str, sizeof(temp_str), "%d", temp_display);
       GSize sz_temp = graphics_text_layout_get_content_size(temp_str, bitham30_corner,
         GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
       int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;

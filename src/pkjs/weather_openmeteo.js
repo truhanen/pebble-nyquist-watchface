@@ -12,6 +12,7 @@ function getWeatherFromCoords(pos) {
     '&current_weather=true' +
     '&daily=temperature_2m_max,temperature_2m_min,uv_index_max,weathercode' +
     '&hourly=uv_index' +
+    '&temperature_unit=celsius' +
     '&timezone=auto';
 
   console.log(url);

@@ -13,7 +13,8 @@ function loadSettings() {
     ShowBottomLeft: window.localStorage.getItem('ShowBottomLeft') !== '0',
     ShowBottomRight: window.localStorage.getItem('ShowBottomRight') !== '0',
     InvertColors: window.localStorage.getItem('InvertColors') === '1',
-    TimeFormat24h: window.localStorage.getItem('TimeFormat24h') !== '0'
+    TimeFormat24h: window.localStorage.getItem('TimeFormat24h') !== '0',
+    TemperatureUnitFahrenheit: window.localStorage.getItem('TemperatureUnitFahrenheit') === '1'
   };
 }
 
@@ -24,6 +25,7 @@ function saveSettings(settings) {
   window.localStorage.setItem('ShowBottomRight', settings.ShowBottomRight ? '1' : '0');
   window.localStorage.setItem('InvertColors', settings.InvertColors ? '1' : '0');
   window.localStorage.setItem('TimeFormat24h', settings.TimeFormat24h ? '1' : '0');
+  window.localStorage.setItem('TemperatureUnitFahrenheit', settings.TemperatureUnitFahrenheit ? '1' : '0');
 }
 
 function sendSettingsToWatch(settings) {
@@ -33,7 +35,8 @@ function sendSettingsToWatch(settings) {
     ShowBottomLeft: settings.ShowBottomLeft ? 1 : 0,
     ShowBottomRight: settings.ShowBottomRight ? 1 : 0,
     InvertColors: settings.InvertColors ? 1 : 0,
-    TimeFormat24h: settings.TimeFormat24h ? 1 : 0
+    TimeFormat24h: settings.TimeFormat24h ? 1 : 0,
+    TemperatureUnitFahrenheit: settings.TemperatureUnitFahrenheit ? 1 : 0
   });
 }
 
@@ -78,6 +81,10 @@ function buildConfigPageHtml(isGabbro, settings) {
     '<div class=\"card\">' +
     '<label class=\"item\"><span>Use 24-hour format</span><span class=\"switch\"><input id=\"TimeFormat24h\" type=\"checkbox\"><span class=\"slider\"></span></span></label>' +
     '</div>' +
+    '<h3>Temperature</h3>' +
+    '<div class=\"card\">' +
+    '<label class=\"item\"><span>Unit</span><select id=\"TemperatureUnit\"><option value=\"c\">Celsius</option><option value=\"f\">Fahrenheit</option></select></label>' +
+    '</div>' +
     '<div class=\"actions\"><button id=\"save\">Save</button></div>' +
     '</div>' +
     '<script>' +
@@ -86,8 +93,9 @@ function buildConfigPageHtml(isGabbro, settings) {
     'if(!isGabbro){document.getElementById(\"ShowTopLeft\").checked=s.ShowTopLeft;document.getElementById(\"ShowTopRight\").checked=s.ShowTopRight;document.getElementById(\"ShowBottomLeft\").checked=s.ShowBottomLeft;document.getElementById(\"ShowBottomRight\").checked=s.ShowBottomRight;}' +
     'document.getElementById(\"InvertColors\").checked=s.InvertColors;' +
     'document.getElementById(\"TimeFormat24h\").checked=s.TimeFormat24h;' +
+    'document.getElementById(\"TemperatureUnit\").value=s.TemperatureUnitFahrenheit?\"f\":\"c\";' +
     'document.getElementById(\"save\").onclick=function(){' +
-      'var out={InvertColors:document.getElementById(\"InvertColors\").checked,TimeFormat24h:document.getElementById(\"TimeFormat24h\").checked};' +
+      'var out={InvertColors:document.getElementById(\"InvertColors\").checked,TimeFormat24h:document.getElementById(\"TimeFormat24h\").checked,TemperatureUnitFahrenheit:document.getElementById(\"TemperatureUnit\").value===\"f\"};' +
       'if(!isGabbro){out.ShowTopLeft=document.getElementById(\"ShowTopLeft\").checked;out.ShowTopRight=document.getElementById(\"ShowTopRight\").checked;out.ShowBottomLeft=document.getElementById(\"ShowBottomLeft\").checked;out.ShowBottomRight=document.getElementById(\"ShowBottomRight\").checked;}' +
       'location.href=\"pebblejs://close#\"+encodeURIComponent(JSON.stringify(out));};' +
     '</script></body></html>';
@@ -122,6 +130,7 @@ Pebble.addEventListener('webviewclosed', function(e) {
   if (typeof data.ShowBottomRight === 'boolean') settings.ShowBottomRight = data.ShowBottomRight;
   if (typeof data.InvertColors === 'boolean') settings.InvertColors = data.InvertColors;
   if (typeof data.TimeFormat24h === 'boolean') settings.TimeFormat24h = data.TimeFormat24h;
+  if (typeof data.TemperatureUnitFahrenheit === 'boolean') settings.TemperatureUnitFahrenheit = data.TemperatureUnitFahrenheit;
   saveSettings(settings);
   sendSettingsToWatch(settings);
 });

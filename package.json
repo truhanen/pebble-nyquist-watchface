@@ -30,7 +30,8 @@
       "ShowBottomLeft",
       "ShowBottomRight",
       "InvertColors",
-      "TimeFormat24h"
+      "TimeFormat24h",
+      "TemperatureUnitFahrenheit"
     ],
     "resources": {
       "media": [

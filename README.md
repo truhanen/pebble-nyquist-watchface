@@ -24,6 +24,7 @@ Settings are managed from the Pebble phone app config page. Available options:
 - show/hide corner elements (Emery only)
 - invert black/white colors
 - time format: **24h** or **12h am/pm** (rendered as `h:mmam` / `h:mmpm`)
+- temperature unit: **Celsius** or **Fahrenheit**
 
 ### Weather data
 

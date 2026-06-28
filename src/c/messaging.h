@@ -14,3 +14,4 @@ bool messaging_show_bottom_left(void);
 bool messaging_show_bottom_right(void);
 bool messaging_invert_colors(void);
 bool messaging_time_format_24h(void);
+bool messaging_use_fahrenheit(void);
