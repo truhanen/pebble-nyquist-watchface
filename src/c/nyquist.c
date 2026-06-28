@@ -3,7 +3,7 @@
 #include "messaging.h"
 
 // ── Clock dimensions: Emery set ───────────────────────────────────────────
-#define EMERY_WATCHFACE_CENTER_Y             112  // Clock center Y position on Emery
+#define EMERY_WATCHFACE_CENTER_Y             110  // Clock center Y position on Emery
 #define EMERY_TICK_RADIUS                     85  // Tick ring radius in pixels
 #define EMERY_MINUTE_HAND_LENGTH_PERCENT      89  // Minute hand length as % of half-screen
 #define EMERY_HOUR_HAND_LENGTH_PERCENT        60  // Hour hand length as % of half-screen
