@@ -24,3 +24,8 @@ kill_emulator:
 .PHONY: start_emulator_with_logs
 start_emulator_with_logs: kill_emulator
 	pebble logs --emulator=emery
+
+.PHONY: create_minute_screenshots
+create_minute_screenshots: kill_emulator build install_emulator
+	./scripts/capture-0000-0059.sh
+
