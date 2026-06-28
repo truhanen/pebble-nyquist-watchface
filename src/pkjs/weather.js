@@ -38,6 +38,26 @@ function getCurrentWeatherProvider() {
   }
 }
 
+function getCurrentWeatherProviderName() {
+  var currentWeatherProvider = window.localStorage.getItem('weather_datasource');
+  if (weatherProviders[currentWeatherProvider] !== undefined) {
+    return currentWeatherProvider;
+  }
+  return DEFAULT_WEATHER_PROVIDER;
+}
+
+function requestWeatherFromProvider(pos) {
+  var providerName = getCurrentWeatherProviderName();
+  if (providerName === 'fmi') {
+    weatherProviders.fmi.getWeatherFromCoords(pos, function() {
+      console.log('FMI failed, falling back to Open-Meteo');
+      weatherProviders.openmeteo.getWeatherFromCoords(pos);
+    });
+    return;
+  }
+  weatherProviders[providerName].getWeatherFromCoords(pos);
+}
+
 function updateWeather(forceUpdate) {
   var weatherDisabled = window.localStorage.getItem('disable_weather');
 
@@ -68,7 +88,7 @@ function updateWeather(forceUpdate) {
                     }
                   };
 
-        getCurrentWeatherProvider().getWeatherFromCoords(pos);
+        requestWeatherFromProvider(pos);
       }
     } else {
       // if we don't have a stored location, get the GPS location
@@ -102,7 +122,7 @@ function locationError(err) {
 }
 
 function locationSuccess(pos) {
-  getCurrentWeatherProvider().getWeatherFromCoords(pos);
+  requestWeatherFromProvider(pos);
 }
 
 function sendWeatherToPebble(dictionary) {
@@ -127,12 +147,29 @@ function sendWeatherToPebble(dictionary) {
   );
 }
 
-var xhrRequest = function (url, type, callback) {
+var xhrRequest = function (url, type, callback, errorCallback) {
   var xhr = new XMLHttpRequest();
   xhr.onload = function () {
-    callback(this.responseText);
+    if (this.status >= 200 && this.status < 300) {
+      callback(this.responseText);
+      return;
+    }
+    if (errorCallback) {
+      errorCallback('HTTP status ' + this.status);
+    }
+  };
+  xhr.onerror = function() {
+    if (errorCallback) {
+      errorCallback('Network error');
+    }
+  };
+  xhr.ontimeout = function() {
+    if (errorCallback) {
+      errorCallback('Request timeout');
+    }
   };
   xhr.open(type, url);
+  xhr.timeout = 15000;
   xhr.send();
 };
 

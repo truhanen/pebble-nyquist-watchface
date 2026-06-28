@@ -4,7 +4,7 @@ module.exports.getWeatherFromCoords = getWeatherFromCoords;
 
 var FMI_WFS_BASE = 'https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature';
 
-function getWeatherFromCoords(pos) {
+function getWeatherFromCoords(pos, onFailure) {
   var lat = pos.coords.latitude;
   var lon = pos.coords.longitude;
   var latlon = lat + ',' + lon;
@@ -27,7 +27,15 @@ function getWeatherFromCoords(pos) {
   console.log('FMI edited URL: ' + editedUrl);
 
   weatherCommon.xhrRequest(editedUrl, 'GET', function(editedXml) {
-    processWeatherData(editedXml, now);
+    var ok = processWeatherData(editedXml, now);
+    if (!ok && onFailure) {
+      onFailure();
+    }
+  }, function(err) {
+    console.log('FMI request failed: ' + err);
+    if (onFailure) {
+      onFailure();
+    }
   });
 }
 
@@ -66,6 +74,11 @@ function processWeatherData(editedXml, now) {
   // Current temperature and icon: closest timestep to now
   var editedTemps   = editedData.filter(function(e) { return e.param === 'Temperature'; });
   var editedSymbols = editedData.filter(function(e) { return e.param === 'SmartSymbol'; });
+
+  if (editedTemps.length === 0 || editedSymbols.length === 0) {
+    console.log('FMI parse failed: missing temperature or symbol data');
+    return false;
+  }
 
   var closestTemp = findClosest(editedTemps, now);
   var currentTemp = closestTemp ? Math.round(closestTemp.value) : 0;
@@ -137,6 +150,7 @@ function processWeatherData(editedXml, now) {
 
   console.log(JSON.stringify(dictionary));
   weatherCommon.sendWeatherToPebble(dictionary);
+  return true;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
