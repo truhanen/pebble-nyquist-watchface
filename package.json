@@ -34,6 +34,7 @@
     ],
     "resources": {
       "media": [
+        { "type": "bitmap", "name": "LAUNCHER_ICON", "file": "launcher_icon.png", "menuIcon": true },
         { "file": "data/WEATHER_GENERIC.pdc", "name": "WEATHER_GENERIC", "type": "raw" },
         { "file": "data/WEATHER_THUNDERSTORM.pdc", "name": "WEATHER_THUNDERSTORM", "type": "raw" },
         { "file": "data/WEATHER_RAINING_AND_SNOWING.pdc", "name": "WEATHER_RAINING_AND_SNOWING", "type": "raw" },
