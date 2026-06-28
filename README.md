@@ -1,36 +1,40 @@
-# pebble-nyquist-watchface
+# Nyquist
 
-A Pebble watchapp/watchface written in C using the Pebble SDK.
+Pebble analog watchface with bold geometric hands, weather, battery, and date.
 
-## Building & running
+### Makefile
+
+The project uses a _Makefile_ for common routines (build, install, emulator logs,
+and screenshot capture helpers for Emery and Gabbro).
+
+### Platforms
+
+The watchface targets:
+
+- **emery** (Pebble Time 2)
+- **gabbro** (Pebble Round 2)
+
+On Gabbro, corner elements are intentionally never shown so the clock fills the
+round display cleanly.
+
+### Configuration
+
+Settings are managed from the Pebble phone app config page. Available options:
+
+- show/hide corner elements (Emery only)
+- invert black/white colors
+- time format: **24h** or **12h am/pm** (rendered as `h:mmam` / `h:mmpm`)
+
+### Weather data
+
+Phone-side JavaScript fetches weather data and sends updates to the watch via
+AppMessage. The watchface displays current temperature and weather icon when
+available.
+
+### Build & run
 
 ```sh
-pebble build                          # build for all targetPlatforms
-pebble install --emulator emery       # install on the emery emulator
-pebble install --phone <ip>           # install to a paired phone
+pebble build
+pebble install --emulator emery
+pebble install --emulator gabbro
 ```
-
-## Target platforms
-
-`targetPlatforms` in `package.json` controls which watches you build for. The
-modern Pebble hardware is **emery** (Pebble Time 2), **gabbro** (Pebble Round
-2), and **flint** (Pebble 2 Duo); the original Pebble platforms (aplite,
-basalt, chalk, diorite) are included by default for backwards compatibility.
-
-## Project layout
-
-```
-src/c/           C source for the watchapp
-src/pkjs/        PebbleKit JS (phone-side) source, if any
-worker_src/c/    Background worker source, if any
-resources/       Images, fonts, and other bundled resources
-package.json     Project metadata (UUID, platforms, resources, message keys)
-wscript          Build rules — usually no need to edit
-```
-
-By default this project is configured as a watchapp. To make it a watchface,
-set `pebble.watchapp.watchface` to `true` in `package.json`.
-
-## Documentation
-
-Full SDK docs, tutorials, and API reference: <https://developer.repebble.com>
