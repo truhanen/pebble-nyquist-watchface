@@ -131,6 +131,10 @@ static int32_t prv_trig_offset_compensated(int32_t value, int32_t trig) {
   return base;
 }
 
+static int64_t prv_abs64(int64_t v) {
+  return v < 0 ? -v : v;
+}
+
 static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
                              int outer_dist, int half_width, int apex_ext,
                              int tail, int stroke_w, GColor color) {
@@ -159,6 +163,45 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
     outer_pt.x + prv_trig_offset_compensated(apex_ext, sin_a),
     outer_pt.y - prv_trig_offset_compensated(apex_ext, cos_a),
   };
+
+  // Additional correction on top of side compensation:
+  // shift inner_left and inner_right together by 1 px if it brings
+  // the watch center closer to the hand center axis.
+  int32_t inner_mid_x = (inner_left.x + inner_right.x) / 2;
+  int32_t inner_mid_y = (inner_left.y + inner_right.y) / 2;
+  int32_t outer_mid_x = (outer_left.x + outer_right.x) / 2;
+  int32_t outer_mid_y = (outer_left.y + outer_right.y) / 2;
+  int32_t axis_dx = outer_mid_x - inner_mid_x;
+  int32_t axis_dy = outer_mid_y - inner_mid_y;
+
+  if (axis_dx != 0 || axis_dy != 0) {
+    const int shifts[5][2] = { {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
+    int best_index = 0;
+    int64_t best_error = -1;
+
+    for (int i = 0; i < 5; i++) {
+      int32_t sx = shifts[i][0];
+      int32_t sy = shifts[i][1];
+      int32_t test_inner_x = inner_mid_x + sx;
+      int32_t test_inner_y = inner_mid_y + sy;
+      int64_t cross = (int64_t)axis_dx * (center.y - test_inner_y)
+                    - (int64_t)axis_dy * (center.x - test_inner_x);
+      int64_t err = prv_abs64(cross);
+      if (best_error < 0 || err < best_error) {
+        best_error = err;
+        best_index = i;
+      }
+    }
+
+    if (best_index != 0) {
+      int32_t sx = shifts[best_index][0];
+      int32_t sy = shifts[best_index][1];
+      inner_left.x += sx;
+      inner_left.y += sy;
+      inner_right.x += sx;
+      inner_right.y += sy;
+    }
+  }
 
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, stroke_w);
