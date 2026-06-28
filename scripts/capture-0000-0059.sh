@@ -17,7 +17,7 @@ for minute in $(seq 0 59); do
   filename=$(printf "%s/00-%02d.png" "${OUTPUT_DIR}" "${minute}")
 
   pebble emu-set-time "${hhmmss}" --emulator "${PLATFORM}"
-  sleep 0.2
+  sleep 0.3
   pebble screenshot "${filename}" --emulator "${PLATFORM}" --no-open
 
   echo "Captured ${filename}"
