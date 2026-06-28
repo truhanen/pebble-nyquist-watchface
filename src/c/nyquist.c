@@ -43,7 +43,6 @@
 // ── Font metric correction offsets (compensate for internal font padding) ─
 #define TOP_CORNER_VERTICAL_CORRECTION     (-5)  // top corner content is this many px too low
 #define BOTTOM_STRIP_VERTICAL_CORRECTION   (-2)  // bottom strip text is this many px too low
-#define LECO32_BOX_TO_GLYPH_BASELINE_OFFSET  6    // LECO_32 glyph bottom baseline offset from the text box bottom baseline
 
 // ── Bottom strip layout ───────────────────────────────────────────────────
 #define BOTTOM_STRIP_TEXT_WIDTH_LIMIT      72   // max width budget for Bitham 30 bottom-strip labels
@@ -92,7 +91,7 @@ static GPoint tick_inner(GPoint outer, GPoint center, int tick_len) {
 }
 
 // ── Draw all 12 tick marks: white halo, black body, fixed radius ──────────
-static void draw_all_ticks(GContext *ctx, GPoint center) {
+static void draw_all_ticks(GContext *ctx, GPoint center, GColor halo_color, GColor body_color) {
   for (int i = 0; i < 12; i++) {
     int32_t angle = i * TRIG_MAX_ANGLE / 12;
     int32_t sin_a = sin_lookup(angle);
@@ -107,11 +106,11 @@ static void draw_all_ticks(GContext *ctx, GPoint center) {
     GPoint inner = tick_inner(outer, center, TICK_LENGTH);
 
     // halo
-    graphics_context_set_stroke_color(ctx, GColorWhite);
+    graphics_context_set_stroke_color(ctx, halo_color);
     graphics_context_set_stroke_width(ctx, TICK_HALO_WIDTH);
     graphics_draw_line(ctx, outer, inner);
     // body
-    graphics_context_set_stroke_color(ctx, GColorBlack);
+    graphics_context_set_stroke_color(ctx, body_color);
     graphics_context_set_stroke_width(ctx, TICK_WIDTH);
     graphics_draw_line(ctx, outer, inner);
   }
@@ -231,20 +230,15 @@ static void draw_hand_fill(GContext *ctx, GPoint center, int32_t angle,
 // ── Separator dot helper ──────────────────────────────────────────────────
 #define SEP_DOT_SIZE  4
 
-static void prv_draw_sep_dot(GContext *ctx, int x, int y) {
-  graphics_context_set_fill_color(ctx, GColorBlack);
+static void prv_draw_sep_dot(GContext *ctx, int x, int y, GColor color) {
+  graphics_context_set_fill_color(ctx, color);
   graphics_fill_rect(ctx, GRect(x, y, SEP_DOT_SIZE, SEP_DOT_SIZE), 0, GCornerNone);
 }
 
 // Colon: two dots vertically, centred on the actual glyph height
-static void draw_sep_colon(GContext *ctx, int x, int glyph_center_y) {
-  prv_draw_sep_dot(ctx, x, glyph_center_y - 7);
-  prv_draw_sep_dot(ctx, x, glyph_center_y + 3);
-}
-
-// Period: single dot placed on the digit baseline
-static void draw_sep_period(GContext *ctx, int x, int baseline_y) {
-  prv_draw_sep_dot(ctx, x, baseline_y);
+static void draw_sep_colon(GContext *ctx, int x, int glyph_center_y, GColor color) {
+  prv_draw_sep_dot(ctx, x, glyph_center_y - 7, color);
+  prv_draw_sep_dot(ctx, x, glyph_center_y + 3, color);
 }
 
 // ── Main draw callback ─────────────────────────────────────────────────────
@@ -252,6 +246,10 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int w = bounds.size.w;
   int h = bounds.size.h;
+  bool invert_colors = messaging_invert_colors();
+  GColor bg = invert_colors ? GColorBlack : GColorWhite;
+  GColor fg = invert_colors ? GColorWhite : GColorBlack;
+  GColor minute_halo = bg;
 
   // Clock center: shifted upward from vertical center between strips
   GPoint center = GPoint(w / 2, WATCHFACE_CENTER_Y);
@@ -265,7 +263,7 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                        + s_minutes * TRIG_MAX_ANGLE / 720;
 
   // ── Background ────────────────────────────────────────────────────────
-  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_context_set_fill_color(ctx, bg);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
   // ── Hour hand ─────────────────────────────────────────────────────────
@@ -273,113 +271,117 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                    hour_len - HAND_EDGE_WIDTH / 2,
                    HOUR_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
                    HOUR_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, GColorBlack);
+                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, fg);
   draw_hand_fill(ctx, center, hour_angle,
-                 hour_len - HAND_EDGE_WIDTH / 2 - 1, HOUR_HAND_INNER_WIDTH, GColorBlack);
+                 hour_len - HAND_EDGE_WIDTH / 2 - 1, HOUR_HAND_INNER_WIDTH, fg);
 
   // ── Minute hand ───────────────────────────────────────────────────────
   draw_hand_border(ctx, center, min_angle,
                    minute_len - HAND_EDGE_WIDTH / 2,
                    MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
                    MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH + 2 * HAND_HALO_WIDTH, GColorWhite);
+                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH + 2 * HAND_HALO_WIDTH, minute_halo);
   draw_hand_border(ctx, center, min_angle,
                    minute_len - HAND_EDGE_WIDTH / 2,
                    MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
                    MINUTE_HAND_OUTER_WIDTH / 2 - HAND_EDGE_WIDTH / 2,
-                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, GColorBlack);
+                   HAND_TAIL_LENGTH, HAND_EDGE_WIDTH, fg);
   draw_hand_fill(ctx, center, min_angle,
-                 minute_len - HAND_EDGE_WIDTH / 2 - 1, MINUTE_HAND_INNER_WIDTH, GColorBlack);
+                 minute_len - HAND_EDGE_WIDTH / 2 - 1, MINUTE_HAND_INNER_WIDTH, fg);
 
   // ── Center pivot ──────────────────────────────────────────────────────
-  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_context_set_fill_color(ctx, bg);
   graphics_fill_circle(ctx, center, 3);
 
   // ── Ticks: drawn after hands so they appear on top ────────────────────
-  draw_all_ticks(ctx, center);
+  draw_all_ticks(ctx, center, bg, fg);
 
   // ── Top-left: temperature above, weather icon below ──────────────────
   GFont bitham30_corner = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
   int corner_text_h = 30; // measure budget
-  if (Weather_weatherInfo.currentTemp != INT32_MIN) {
-    char temp_str[6];
-    snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
-    GSize sz_temp = graphics_text_layout_get_content_size(temp_str, bitham30_corner,
-      GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-    int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;
-    int top_left_group_y = TOP_LEFT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
-    int top_left_group_icon_y = top_left_group_y + sz_temp.h + 4;
-    graphics_context_set_text_color(ctx, GColorBlack);
-    graphics_draw_text(ctx, temp_str, bitham30_corner,
-                       GRect(top_left_group_x, top_left_group_y, sz_temp.w + 2, corner_text_h),
-                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-    if (Weather_currentWeatherIcon) {
-      gdraw_command_image_recolor(Weather_currentWeatherIcon, GColorWhite, GColorBlack);
-      gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(top_left_group_x, top_left_group_icon_y));
+  if (messaging_show_top_left()) {
+    if (Weather_weatherInfo.currentTemp != INT32_MIN) {
+      char temp_str[6];
+      snprintf(temp_str, sizeof(temp_str), "%d", Weather_weatherInfo.currentTemp);
+      GSize sz_temp = graphics_text_layout_get_content_size(temp_str, bitham30_corner,
+        GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+      int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;
+      int top_left_group_y = TOP_LEFT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
+      int top_left_group_icon_y = top_left_group_y + sz_temp.h + 4;
+      graphics_context_set_text_color(ctx, fg);
+      graphics_draw_text(ctx, temp_str, bitham30_corner,
+                         GRect(top_left_group_x, top_left_group_y, sz_temp.w + 2, corner_text_h),
+                         GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+      if (Weather_currentWeatherIcon) {
+        gdraw_command_image_recolor(Weather_currentWeatherIcon, bg, fg);
+        gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(top_left_group_x, top_left_group_icon_y));
+      }
+    } else if (Weather_currentWeatherIcon) {
+      int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;
+      int top_left_group_y = TOP_LEFT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
+      gdraw_command_image_recolor(Weather_currentWeatherIcon, bg, fg);
+      gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(top_left_group_x, top_left_group_y));
     }
-  } else if (Weather_currentWeatherIcon) {
-    int top_left_group_x = TOP_LEFT_GROUP_OFFSET_X;
-    int top_left_group_y = TOP_LEFT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
-    gdraw_command_image_recolor(Weather_currentWeatherIcon, GColorWhite, GColorBlack);
-    gdraw_command_image_draw(ctx, Weather_currentWeatherIcon, GPoint(top_left_group_x, top_left_group_y));
   }
 
   // ── Top-right: percentage above, battery icon below ──────────────────
   BatteryChargeState bat = battery_state_service_peek();
   uint8_t pct = (bat.charge_percent > 0) ? bat.charge_percent : 5;
 
-  char bat_str[4];
-  snprintf(bat_str, sizeof(bat_str), "%d", pct);
-  GSize sz_bat = graphics_text_layout_get_content_size(bat_str, bitham30_corner,
-    GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
-  int top_right_group_right = w - TOP_RIGHT_GROUP_OFFSET_X;
-  int top_right_group_y = TOP_RIGHT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
-  int bat_text_x = top_right_group_right - sz_bat.w;
-  int bat_icon_y = top_right_group_y + sz_bat.h + 4;
+  if (messaging_show_top_right()) {
+    char bat_str[4];
+    snprintf(bat_str, sizeof(bat_str), "%d", pct);
+    GSize sz_bat = graphics_text_layout_get_content_size(bat_str, bitham30_corner,
+      GRect(0, 0, 60, corner_text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
+    int top_right_group_right = w - TOP_RIGHT_GROUP_OFFSET_X;
+    int top_right_group_y = TOP_RIGHT_GROUP_OFFSET_Y + TOP_CORNER_VERTICAL_CORRECTION;
+    int bat_text_x = top_right_group_right - sz_bat.w;
+    int bat_icon_y = top_right_group_y + sz_bat.h + 4;
 
-  int bat_x = top_right_group_right - BATTERY_ICON_WIDTH;
-  int bat_y = bat_icon_y;
+    int bat_x = top_right_group_right - BATTERY_ICON_WIDTH;
+    int bat_y = bat_icon_y;
 
-  int nub_x = bat_x + (BATTERY_ICON_WIDTH - BATTERY_ICON_NUB_WIDTH) / 2;
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, GRect(nub_x, bat_y, BATTERY_ICON_NUB_WIDTH, BATTERY_ICON_NUB_HEIGHT), 0, GCornerNone);
+    int nub_x = bat_x + (BATTERY_ICON_WIDTH - BATTERY_ICON_NUB_WIDTH) / 2;
+    graphics_context_set_fill_color(ctx, fg);
+    graphics_fill_rect(ctx, GRect(nub_x, bat_y, BATTERY_ICON_NUB_WIDTH, BATTERY_ICON_NUB_HEIGHT), 0, GCornerNone);
 
-  // Rect 1: black outer body
-  graphics_context_set_fill_color(ctx, GColorBlack);
-  graphics_fill_rect(ctx, GRect(bat_x, bat_y + BATTERY_ICON_NUB_HEIGHT, BATTERY_ICON_WIDTH, BATTERY_ICON_HEIGHT), 2, GCornersAll);
+    // Rect 1: foreground outer body
+    graphics_context_set_fill_color(ctx, fg);
+    graphics_fill_rect(ctx, GRect(bat_x, bat_y + BATTERY_ICON_NUB_HEIGHT, BATTERY_ICON_WIDTH, BATTERY_ICON_HEIGHT), 2, GCornersAll);
 
-  // Rect 2: white inner area (border = BATTERY_ICON_BORDER px)
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER, bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER,
-                                BATTERY_ICON_WIDTH - 2 * BATTERY_ICON_BORDER, BATTERY_ICON_HEIGHT - 2 * BATTERY_ICON_BORDER), 1, GCornersAll);
+    // Rect 2: background inner area
+    graphics_context_set_fill_color(ctx, bg);
+    graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER, bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER,
+                                  BATTERY_ICON_WIDTH - 2 * BATTERY_ICON_BORDER, BATTERY_ICON_HEIGHT - 2 * BATTERY_ICON_BORDER), 1, GCornersAll);
 
-  // Rect 3: black charge fill (gap = BATTERY_ICON_FILL_GAP px inside the white area)
-  int fill_inner_h = BATTERY_ICON_HEIGHT - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP);
-  int fill_h = fill_inner_h * pct / 100;
-  int fill_y = bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP + (fill_inner_h - fill_h);
+    // Rect 3: charge fill
+    int fill_inner_h = BATTERY_ICON_HEIGHT - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP);
+    int fill_h = fill_inner_h * pct / 100;
+    int fill_y = bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP + (fill_inner_h - fill_h);
 #ifdef PBL_COLOR
-  graphics_context_set_fill_color(ctx, pct <= 20 ? GColorRed : GColorBlack);
+    graphics_context_set_fill_color(ctx, pct <= 20 ? GColorRed : fg);
 #else
-  graphics_context_set_fill_color(ctx, GColorBlack);
+    graphics_context_set_fill_color(ctx, fg);
 #endif
-  if (bat.is_charging) {
-    graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP, bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP,
-                                  BATTERY_ICON_WIDTH - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP), fill_inner_h), 0, GCornerNone);
-  } else {
-    graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP, fill_y,
-                                  BATTERY_ICON_WIDTH - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP), fill_h), 0, GCornerNone);
-  }
+    if (bat.is_charging) {
+      graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP, bat_y + BATTERY_ICON_NUB_HEIGHT + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP,
+                                    BATTERY_ICON_WIDTH - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP), fill_inner_h), 0, GCornerNone);
+    } else {
+      graphics_fill_rect(ctx, GRect(bat_x + BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP, fill_y,
+                                    BATTERY_ICON_WIDTH - 2 * (BATTERY_ICON_BORDER + BATTERY_ICON_FILL_GAP), fill_h), 0, GCornerNone);
+    }
 
-  graphics_context_set_text_color(ctx, GColorBlack);
-  graphics_draw_text(ctx, bat_str, bitham30_corner,
-                     GRect(bat_text_x, top_right_group_y, sz_bat.w + 2, corner_text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    graphics_context_set_text_color(ctx, fg);
+    graphics_draw_text(ctx, bat_str, bitham30_corner,
+                       GRect(bat_text_x, top_right_group_y, sz_bat.w + 2, corner_text_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  }
 
   // ── Bottom strip: time (left) and date (right) ────────────────────────
   GFont bitham30_strip = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
   int text_h   = h - WATCHFACE_CENTER_Y;
 
-  graphics_context_set_text_color(ctx, GColorBlack);
+  graphics_context_set_text_color(ctx, fg);
 
   // Measure hours first to derive strip_text_y from bottom gap
   GSize sz_hours = graphics_text_layout_get_content_size(s_hours_str, bitham30_strip,
@@ -389,17 +391,19 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   int strip_text_y = strip_group_bottom_left - sz_hours.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
 
   // Time: HH : MM
-  int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
-  graphics_draw_text(ctx, s_hours_str, bitham30_strip,
-                     GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  tx += sz_hours.w + 2;
-  int colon_center_y = strip_text_y + sz_hours.h / 2 + 5;
-  draw_sep_colon(ctx, tx, colon_center_y);
-  tx += BOTTOM_STRIP_SEPARATOR_WIDTH;
-  graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
-                     GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  if (messaging_show_bottom_left()) {
+    int tx = BOTTOM_LEFT_GROUP_OFFSET_X;
+    graphics_draw_text(ctx, s_hours_str, bitham30_strip,
+                       GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    tx += sz_hours.w + 2;
+    int colon_center_y = strip_text_y + sz_hours.h / 2 + 5;
+    draw_sep_colon(ctx, tx, colon_center_y, fg);
+    tx += BOTTOM_STRIP_SEPARATOR_WIDTH;
+    graphics_draw_text(ctx, s_minutes_str, bitham30_strip,
+                       GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  }
 
   // Date: two-line block, right-aligned (day over month abbreviation)
   GSize sz_month = graphics_text_layout_get_content_size(s_month_str, bitham30_strip,
@@ -407,21 +411,23 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
 
-  int date_right = w - BOTTOM_RIGHT_GROUP_OFFSET_X;
-  int date_gap_y = -5;
-  int date_block_h = sz_day.h + date_gap_y + sz_month.h;
-  int day_y = strip_group_bottom_right - date_block_h + BOTTOM_STRIP_VERTICAL_CORRECTION;
-  int month_y = day_y + sz_day.h + date_gap_y;
+  if (messaging_show_bottom_right()) {
+    int date_right = w - BOTTOM_RIGHT_GROUP_OFFSET_X;
+    int date_gap_y = -5;
+    int date_block_h = sz_day.h + date_gap_y + sz_month.h;
+    int day_y = strip_group_bottom_right - date_block_h + BOTTOM_STRIP_VERTICAL_CORRECTION;
+    int month_y = day_y + sz_day.h + date_gap_y;
 
-  int day_x = date_right - sz_day.w;
-  graphics_draw_text(ctx, s_day_str, bitham30_strip,
-                     GRect(day_x, day_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    int day_x = date_right - sz_day.w;
+    graphics_draw_text(ctx, s_day_str, bitham30_strip,
+                       GRect(day_x, day_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  int month_x = date_right - sz_month.w;
-  graphics_draw_text(ctx, s_month_str, bitham30_strip,
-                     GRect(month_x, month_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+    int month_x = date_right - sz_month.w;
+    graphics_draw_text(ctx, s_month_str, bitham30_strip,
+                       GRect(month_x, month_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                       GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+  }
 }
 
 // ── Time update ───────────────────────────────────────────────────────────

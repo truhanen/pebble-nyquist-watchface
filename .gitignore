@@ -4,3 +4,4 @@ tmp
 .lock-waf_darwin_build
 .python-version
 pyproject.toml
+node_modules

@@ -3,6 +3,31 @@
 #include "messaging.h"
 
 static void (*s_message_processed_callback)(void);
+enum {
+  PERSIST_SHOW_TOP_LEFT = 300,
+  PERSIST_SHOW_TOP_RIGHT = 301,
+  PERSIST_SHOW_BOTTOM_LEFT = 302,
+  PERSIST_SHOW_BOTTOM_RIGHT = 303,
+  PERSIST_INVERT_COLORS = 304
+};
+
+static bool s_show_top_left = true;
+static bool s_show_top_right = true;
+static bool s_show_bottom_left = true;
+static bool s_show_bottom_right = true;
+static bool s_invert_colors = false;
+
+static void prv_load_bool(int key, bool *target) {
+  if (persist_exists(key)) {
+    *target = persist_read_bool(key);
+  }
+}
+
+static void prv_store_bool_from_tuple(Tuple *t, int key, bool *target) {
+  if (!t) return;
+  *target = t->value->int32 != 0;
+  persist_write_bool(key, *target);
+}
 
 void messaging_requestNewWeatherData() {
   DictionaryIterator *iter;
@@ -13,6 +38,11 @@ void messaging_requestNewWeatherData() {
 
 void messaging_init(void (*processed_callback)(void)) {
   s_message_processed_callback = processed_callback;
+  prv_load_bool(PERSIST_SHOW_TOP_LEFT, &s_show_top_left);
+  prv_load_bool(PERSIST_SHOW_TOP_RIGHT, &s_show_top_right);
+  prv_load_bool(PERSIST_SHOW_BOTTOM_LEFT, &s_show_bottom_left);
+  prv_load_bool(PERSIST_SHOW_BOTTOM_RIGHT, &s_show_bottom_right);
+  prv_load_bool(PERSIST_INVERT_COLORS, &s_invert_colors);
   app_message_register_inbox_received(inbox_received_callback);
   app_message_register_inbox_dropped(inbox_dropped_callback);
   app_message_register_outbox_failed(outbox_failed_callback);
@@ -43,6 +73,12 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
   t = dict_find(iterator, MESSAGE_KEY_WeatherForecastLowTemp);
   if (t) { Weather_weatherInfo.todaysLowTemp = (int)t->value->int32; weatherDataUpdated = true; }
 
+  prv_store_bool_from_tuple(dict_find(iterator, MESSAGE_KEY_ShowTopLeft), PERSIST_SHOW_TOP_LEFT, &s_show_top_left);
+  prv_store_bool_from_tuple(dict_find(iterator, MESSAGE_KEY_ShowTopRight), PERSIST_SHOW_TOP_RIGHT, &s_show_top_right);
+  prv_store_bool_from_tuple(dict_find(iterator, MESSAGE_KEY_ShowBottomLeft), PERSIST_SHOW_BOTTOM_LEFT, &s_show_bottom_left);
+  prv_store_bool_from_tuple(dict_find(iterator, MESSAGE_KEY_ShowBottomRight), PERSIST_SHOW_BOTTOM_RIGHT, &s_show_bottom_right);
+  prv_store_bool_from_tuple(dict_find(iterator, MESSAGE_KEY_InvertColors), PERSIST_INVERT_COLORS, &s_invert_colors);
+
   if (weatherDataUpdated) {
     Weather_saveData();
   }
@@ -55,3 +91,9 @@ void inbox_received_callback(DictionaryIterator *iterator, void *context) {
 void inbox_dropped_callback(AppMessageResult reason, void *context) {}
 void outbox_failed_callback(DictionaryIterator *iterator, AppMessageResult reason, void *context) {}
 void outbox_sent_callback(DictionaryIterator *iterator, void *context) {}
+
+bool messaging_show_top_left(void) { return s_show_top_left; }
+bool messaging_show_top_right(void) { return s_show_top_right; }
+bool messaging_show_bottom_left(void) { return s_show_bottom_left; }
+bool messaging_show_bottom_right(void) { return s_show_bottom_right; }
+bool messaging_invert_colors(void) { return s_invert_colors; }
