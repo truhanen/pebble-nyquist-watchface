@@ -118,6 +118,19 @@ static void draw_all_ticks(GContext *ctx, GPoint center) {
 }
 
 // ── Draws the pentagon outline of a hand ──────────────────────────────────
+static int32_t prv_trig_offset_trunc(int32_t value, int32_t trig) {
+  return ((int64_t)value * trig) / TRIG_MAX_RATIO;
+}
+
+static int32_t prv_trig_offset_compensated(int32_t value, int32_t trig) {
+  int64_t scaled = (int64_t)value * trig;
+  int32_t base = scaled / TRIG_MAX_RATIO;
+  if (scaled % TRIG_MAX_RATIO != 0) {
+    base += (scaled > 0 ? 1 : -1);
+  }
+  return base;
+}
+
 static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
                              int outer_dist, int half_width, int apex_ext,
                              int tail, int stroke_w, GColor color) {
@@ -129,20 +142,22 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
     center.y + (int32_t)tail       * cos_a / TRIG_MAX_RATIO,
   };
   GPoint outer_pt = {
-    center.x + (int32_t)outer_dist * sin_a / TRIG_MAX_RATIO,
-    center.y - (int32_t)outer_dist * cos_a / TRIG_MAX_RATIO,
+    center.x + prv_trig_offset_compensated(outer_dist, sin_a),
+    center.y - prv_trig_offset_compensated(outer_dist, cos_a),
   };
 
-  int x_diff = (int32_t)half_width * cos_a / TRIG_MAX_RATIO;
-  int y_diff = (int32_t)half_width * sin_a / TRIG_MAX_RATIO;
+  int32_t x_diff_left  = prv_trig_offset_trunc(half_width, cos_a);
+  int32_t y_diff_left  = prv_trig_offset_trunc(half_width, sin_a);
+  int32_t x_diff_right = prv_trig_offset_compensated(half_width, cos_a);
+  int32_t y_diff_right = prv_trig_offset_compensated(half_width, sin_a);
 
-  GPoint inner_right = { inner_pt.x + x_diff, inner_pt.y + y_diff };
-  GPoint inner_left  = { inner_pt.x - x_diff, inner_pt.y - y_diff };
-  GPoint outer_right = { outer_pt.x + x_diff, outer_pt.y + y_diff };
-  GPoint outer_left  = { outer_pt.x - x_diff, outer_pt.y - y_diff };
+  GPoint inner_right = { inner_pt.x + x_diff_right, inner_pt.y + y_diff_right };
+  GPoint inner_left  = { inner_pt.x - x_diff_left,  inner_pt.y - y_diff_left };
+  GPoint outer_right = { outer_pt.x + x_diff_right, outer_pt.y + y_diff_right };
+  GPoint outer_left  = { outer_pt.x - x_diff_left,  outer_pt.y - y_diff_left };
   GPoint apex        = {
-    outer_pt.x + (int32_t)apex_ext * sin_a / TRIG_MAX_RATIO,
-    outer_pt.y - (int32_t)apex_ext * cos_a / TRIG_MAX_RATIO,
+    outer_pt.x + prv_trig_offset_compensated(apex_ext, sin_a),
+    outer_pt.y - prv_trig_offset_compensated(apex_ext, cos_a),
   };
 
   graphics_context_set_stroke_color(ctx, color);
