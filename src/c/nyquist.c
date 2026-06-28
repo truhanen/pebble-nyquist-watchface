@@ -28,7 +28,7 @@
 #define BATTERY_ICON_FILL_GAP      2   // inset gap around the fill inside the icon
 
 // ── UI layout ──────────────────────────────────────────────────────────────
-#define WATCHFACE_CENTER_Y      107   // tweak this single y-coordinate to move the layout
+#define WATCHFACE_CENTER_Y      112   // tweak this single y-coordinate to move the layout
 
 // ── Corner group offsets (gap from screen corner to group corner) ──────────
 #define TOP_LEFT_GROUP_OFFSET_X       4   // top-left corner to weather text group
@@ -46,7 +46,7 @@
 #define LECO32_BOX_TO_GLYPH_BASELINE_OFFSET  6    // LECO_32 glyph bottom baseline offset from the text box bottom baseline
 
 // ── Bottom strip layout ───────────────────────────────────────────────────
-#define BOTTOM_STRIP_TEXT_WIDTH_LIMIT      48   // max width budget for two Bitham 30 digits
+#define BOTTOM_STRIP_TEXT_WIDTH_LIMIT      72   // max width budget for Bitham 30 bottom-strip labels
 #define BOTTOM_STRIP_SEPARATOR_WIDTH        6   // separator column width
 
 static Window *s_window;
@@ -56,7 +56,7 @@ static int  s_hours, s_minutes;
 static char s_hours_str[3];
 static char s_minutes_str[3];
 static char s_day_str[3];
-static char s_month_str[3];
+static char s_month_str[4];
 
 // ── Recolor PDC image ─────────────────────────────────────────────────────
 static bool prv_recolor_cb(GDrawCommand *cmd, uint32_t index, void *ctx) {
@@ -401,22 +401,26 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
                      GRect(tx, strip_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 
-  // Date: DD . MM, right-aligned — measure from right edge inward
+  // Date: two-line block, right-aligned (day over month abbreviation)
   GSize sz_month = graphics_text_layout_get_content_size(s_month_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
   GSize sz_day   = graphics_text_layout_get_content_size(s_day_str, bitham30_strip,
     GRect(0, 0, BOTTOM_STRIP_TEXT_WIDTH_LIMIT + 10, text_h), GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft);
 
-  int dx = w - BOTTOM_RIGHT_GROUP_OFFSET_X - sz_month.w;
-  int date_text_y = strip_group_bottom_right - sz_month.h + BOTTOM_STRIP_VERTICAL_CORRECTION;
-  graphics_draw_text(ctx, s_month_str, bitham30_strip,
-                     GRect(dx, date_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
-                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
-  dx -= BOTTOM_STRIP_SEPARATOR_WIDTH;
-  draw_sep_period(ctx, dx, strip_group_bottom_right - LECO32_BOX_TO_GLYPH_BASELINE_OFFSET);
-  dx -= sz_day.w + 1;
+  int date_right = w - BOTTOM_RIGHT_GROUP_OFFSET_X;
+  int date_gap_y = -5;
+  int date_block_h = sz_day.h + date_gap_y + sz_month.h;
+  int day_y = strip_group_bottom_right - date_block_h + BOTTOM_STRIP_VERTICAL_CORRECTION;
+  int month_y = day_y + sz_day.h + date_gap_y;
+
+  int day_x = date_right - sz_day.w;
   graphics_draw_text(ctx, s_day_str, bitham30_strip,
-                     GRect(dx, date_text_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                     GRect(day_x, day_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
+                     GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
+
+  int month_x = date_right - sz_month.w;
+  graphics_draw_text(ctx, s_month_str, bitham30_strip,
+                     GRect(month_x, month_y, BOTTOM_STRIP_TEXT_WIDTH_LIMIT, text_h),
                      GTextOverflowModeTrailingEllipsis, GTextAlignmentLeft, NULL);
 }
 
@@ -426,8 +430,12 @@ static void handle_tick(struct tm *tick_time, TimeUnits units_changed) {
   s_minutes = tick_time->tm_min;
   snprintf(s_hours_str,   sizeof(s_hours_str),   "%02d", tick_time->tm_hour);
   snprintf(s_minutes_str, sizeof(s_minutes_str), "%02d", tick_time->tm_min);
-  snprintf(s_day_str,     sizeof(s_day_str),     "%02d", tick_time->tm_mday);
-  snprintf(s_month_str,   sizeof(s_month_str),   "%02d", tick_time->tm_mon + 1);
+  snprintf(s_day_str,     sizeof(s_day_str),     "%d", tick_time->tm_mday);
+  static const char *month_abbrevs[12] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+  };
+  snprintf(s_month_str, sizeof(s_month_str), "%s", month_abbrevs[tick_time->tm_mon]);
 
   if (units_changed & HOUR_UNIT) {
     messaging_requestNewWeatherData();
