@@ -38,9 +38,8 @@ start_emulator_with_logs_gabbro: kill_emulator
 
 .PHONY: create_minute_screenshots_emery
 create_minute_screenshots_emery: kill_emulator build install_emulator_emery
-	./scripts/capture-0000-0059.sh
+	./scripts/create_minute_screenshots.sh --emulator emery
 
 .PHONY: create_minute_screenshots_gabbro
 create_minute_screenshots_gabbro: kill_emulator build install_emulator_gabbro
-	./scripts/capture-0000-0059.sh
-
+	./scripts/create_minute_screenshots.sh --emulator gabbro
