@@ -185,14 +185,12 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
   };
 
   // Additional correction on top of side compensation:
-  // shift inner_left and inner_right together by 1 px if it brings
-  // the watch center closer to the hand center axis.
+  // shift outer_left and outer_right together by 1 px so their midpoint
+  // stays as close as possible to the hand main axis.
   int32_t inner_mid_x = (inner_left.x + inner_right.x) / 2;
   int32_t inner_mid_y = (inner_left.y + inner_right.y) / 2;
-  int32_t outer_mid_x = (outer_left.x + outer_right.x) / 2;
-  int32_t outer_mid_y = (outer_left.y + outer_right.y) / 2;
-  int32_t axis_dx = outer_mid_x - inner_mid_x;
-  int32_t axis_dy = outer_mid_y - inner_mid_y;
+  int32_t axis_dx = apex.x - inner_mid_x;
+  int32_t axis_dy = apex.y - inner_mid_y;
 
   if (axis_dx != 0 || axis_dy != 0) {
     const int shifts[5][2] = { {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
@@ -202,10 +200,10 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
     for (int i = 0; i < 5; i++) {
       int32_t sx = shifts[i][0];
       int32_t sy = shifts[i][1];
-      int32_t test_inner_x = inner_mid_x + sx;
-      int32_t test_inner_y = inner_mid_y + sy;
-      int64_t cross = (int64_t)axis_dx * (center.y - test_inner_y)
-                    - (int64_t)axis_dy * (center.x - test_inner_x);
+      int32_t test_outer_mid_x = (outer_left.x + sx + outer_right.x + sx) / 2;
+      int32_t test_outer_mid_y = (outer_left.y + sy + outer_right.y + sy) / 2;
+      int64_t cross = (int64_t)axis_dx * (test_outer_mid_y - inner_mid_y)
+                    - (int64_t)axis_dy * (test_outer_mid_x - inner_mid_x);
       int64_t err = prv_abs64(cross);
       if (best_error < 0 || err < best_error) {
         best_error = err;
@@ -216,10 +214,10 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
     if (best_index != 0) {
       int32_t sx = shifts[best_index][0];
       int32_t sy = shifts[best_index][1];
-      inner_left.x += sx;
-      inner_left.y += sy;
-      inner_right.x += sx;
-      inner_right.y += sy;
+      outer_left.x += sx;
+      outer_left.y += sy;
+      outer_right.x += sx;
+      outer_right.y += sy;
     }
   }
 
