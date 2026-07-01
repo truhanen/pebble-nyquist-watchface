@@ -5,15 +5,8 @@
 // ── Clock dimensions: Emery set ───────────────────────────────────────────
 #define EMERY_WATCHFACE_CENTER_Y             110  // Clock center Y position on Emery
 #define EMERY_TICK_RADIUS                     85  // Tick ring radius in pixels
-#define EMERY_MINUTE_HAND_LENGTH_PERCENT      89  // Minute hand length as % of half-screen
-#define EMERY_HOUR_HAND_LENGTH_PERCENT        60  // Hour hand length as % of half-screen
-#define EMERY_HAND_EDGE_WIDTH                 12  // Base hand stroke width
+#define EMERY_HAND_EDGE_WIDTH                  9  // Base hand stroke width
 #define EMERY_HAND_HALO_WIDTH                  2  // Halo stroke width around hands
-#define EMERY_MINUTE_HAND_OUTER_WIDTH         24  // Minute hand outer polygon width
-#define EMERY_MINUTE_HAND_FILL_WIDTH          12  // Minute hand filled body width
-#define EMERY_HOUR_HAND_OUTER_WIDTH           33  // Hour hand outer polygon width
-#define EMERY_HOUR_HAND_FILL_WIDTH            22  // Hour hand filled body width
-#define EMERY_HAND_TAIL_LENGTH                18  // Tail length behind hand pivot
 #define EMERY_TICK_WIDTH                       2  // Tick body stroke width
 #define EMERY_TICK_HALO_WIDTH                  6  // Tick halo stroke width
 #define EMERY_TICK_LENGTH                      6  // Tick length toward center
@@ -21,15 +14,8 @@
 
 // ── Clock dimensions: Gabbro set ──────────────────────────────────────────
 #define GABBRO_TICK_RADIUS_PERCENT            84  // Tick radius as % of round-screen half-size
-#define GABBRO_MINUTE_HAND_LENGTH_PERCENT    104  // Minute hand length as % of gabbro tick radius
-#define GABBRO_HOUR_HAND_LENGTH_PERCENT       60  // Hour hand length as % of gabbro tick radius
-#define GABBRO_HAND_EDGE_WIDTH                11  // Base hand stroke width
+#define GABBRO_HAND_EDGE_WIDTH                12  // Base hand stroke width (scaled from Emery)
 #define GABBRO_HAND_HALO_WIDTH                 2  // Halo stroke width around hands
-#define GABBRO_MINUTE_HAND_OUTER_WIDTH        26  // Minute hand outer polygon width
-#define GABBRO_MINUTE_HAND_FILL_WIDTH         13  // Minute hand filled body width
-#define GABBRO_HOUR_HAND_OUTER_WIDTH          38  // Hour hand outer polygon width
-#define GABBRO_HOUR_HAND_FILL_WIDTH           26  // Hour hand filled body width
-#define GABBRO_HAND_TAIL_LENGTH               16  // Tail length behind hand pivot
 #define GABBRO_TICK_WIDTH                      2  // Tick body stroke width
 #define GABBRO_TICK_HALO_WIDTH                 7  // Tick halo stroke width
 #define GABBRO_TICK_LENGTH                     8  // Tick length toward center
@@ -111,10 +97,17 @@ static GPoint tick_inner(GPoint outer, GPoint center, int tick_len) {
   };
 }
 
+static int64_t prv_abs64(int64_t v);
+
 // ── Draw all 12 tick marks: white halo, black body, fixed radius ──────────
 static void draw_all_ticks(GContext *ctx, GPoint center, int tick_r, int tick_len,
                            int tick_halo_width, int tick_width,
                            GColor halo_color, GColor body_color) {
+  const int shifts[9][2] = {
+    {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1},
+    {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
+  };
+
   for (int i = 0; i < 12; i++) {
     int32_t angle = i * TRIG_MAX_ANGLE / 12;
     int32_t sin_a = sin_lookup(angle);
@@ -125,6 +118,31 @@ static void draw_all_ticks(GContext *ctx, GPoint center, int tick_r, int tick_le
       center.y - (int32_t)((int64_t)cos_a * tick_r / TRIG_MAX_RATIO),
     };
     GPoint inner = tick_inner(outer, center, tick_len);
+
+    // Shared pixel nudge: shift both endpoints together to keep the tick
+    // segment direction aligned with the intended radial angle.
+    int best_index = 0;
+    int64_t best_error = -1;
+    for (int k = 0; k < 9; k++) {
+      int32_t sx = shifts[k][0];
+      int32_t sy = shifts[k][1];
+      int32_t seg_dx = (outer.x + sx) - (inner.x + sx);
+      int32_t seg_dy = (outer.y + sy) - (inner.y + sy);
+      int64_t cross = (int64_t)sin_a * seg_dy + (int64_t)cos_a * seg_dx;
+      int64_t err = prv_abs64(cross);
+      if (best_error < 0 || err < best_error) {
+        best_error = err;
+        best_index = k;
+      }
+    }
+    if (best_index != 0) {
+      int32_t sx = shifts[best_index][0];
+      int32_t sy = shifts[best_index][1];
+      outer.x += sx;
+      outer.y += sy;
+      inner.x += sx;
+      inner.y += sy;
+    }
 
     // halo
     graphics_context_set_stroke_color(ctx, halo_color);
@@ -137,89 +155,164 @@ static void draw_all_ticks(GContext *ctx, GPoint center, int tick_r, int tick_le
   }
 }
 
-// ── Draws the pentagon outline of a hand ──────────────────────────────────
-static int32_t prv_trig_offset_trunc(int32_t value, int32_t trig) {
-  return ((int64_t)value * trig) / TRIG_MAX_RATIO;
-}
-
-static int32_t prv_trig_offset_compensated(int32_t value, int32_t trig) {
-  int64_t scaled = (int64_t)value * trig;
-  int32_t base = scaled / TRIG_MAX_RATIO;
-  if (scaled % TRIG_MAX_RATIO != 0) {
-    base += (scaled > 0 ? 1 : -1);
-  }
-  return base;
-}
-
 static int64_t prv_abs64(int64_t v) {
   return v < 0 ? -v : v;
 }
 
-static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
-                             int outer_dist, int half_width, int apex_ext,
-                             int tail, int stroke_w, GColor color) {
-  int32_t sin_a = sin_lookup(angle);
-  int32_t cos_a = cos_lookup(angle);
+typedef struct {
+  int16_t x;
+  int16_t y;
+} RelPoint;
 
-  GPoint inner_pt = {
-    center.x - (int32_t)tail       * sin_a / TRIG_MAX_RATIO,
-    center.y + (int32_t)tail       * cos_a / TRIG_MAX_RATIO,
+typedef struct {
+  RelPoint inner_left;
+  RelPoint inner_right;
+  RelPoint outer_left;
+  RelPoint outer_right;
+  RelPoint apex;
+} HandPose;
+
+
+// Pre-calculated snapped minute/hour poses for Emery (center-relative).
+static const HandPose s_minute_base_00_to_07_emery[8] = {
+  { .inner_left = { .x = -7, .y = 18 }, .inner_right = { .x = 8, .y = 18 }, .outer_left = { .x = -7, .y = -86 }, .outer_right = { .x = 8, .y = -86 }, .apex = { .x = 0, .y = -92 } },
+  { .inner_left = { .x = -9, .y = 17 }, .inner_right = { .x = 6, .y = 19 }, .outer_left = { .x = 2, .y = -86 }, .outer_right = { .x = 16, .y = -85 }, .apex = { .x = 10, .y = -91 } },
+  { .inner_left = { .x = -11, .y = 16 }, .inner_right = { .x = 4, .y = 19 }, .outer_left = { .x = 11, .y = -86 }, .outer_right = { .x = 25, .y = -83 }, .apex = { .x = 19, .y = -90 } },
+  { .inner_left = { .x = -13, .y = 15 }, .inner_right = { .x = 2, .y = 19 }, .outer_left = { .x = 19, .y = -84 }, .outer_right = { .x = 34, .y = -79 }, .apex = { .x = 28, .y = -87 } },
+  { .inner_left = { .x = -14, .y = 13 }, .inner_right = { .x = 0, .y = 19 }, .outer_left = { .x = 28, .y = -82 }, .outer_right = { .x = 42, .y = -76 }, .apex = { .x = 37, .y = -84 } },
+  { .inner_left = { .x = -15, .y = 12 }, .inner_right = { .x = -3, .y = 19 }, .outer_left = { .x = 37, .y = -78 }, .outer_right = { .x = 49, .y = -71 }, .apex = { .x = 46, .y = -80 } },
+  { .inner_left = { .x = -17, .y = 10 }, .inner_right = { .x = -5, .y = 19 }, .outer_left = { .x = 44, .y = -74 }, .outer_right = { .x = 57, .y = -65 }, .apex = { .x = 54, .y = -74 } },
+  { .inner_left = { .x = -18, .y = 8 }, .inner_right = { .x = -6, .y = 18 }, .outer_left = { .x = 52, .y = -69 }, .outer_right = { .x = 63, .y = -59 }, .apex = { .x = 62, .y = -68 } },
+};
+
+static const HandPose s_hour_base_00_to_89_emery_5min[18] = {
+  /* 0:00-0:02 */ { .inner_left = { .x = -12, .y = 18 }, .inner_right = { .x = 13, .y = 18 }, .outer_left = { .x = -12, .y = -54 }, .outer_right = { .x = 13, .y = -54 }, .apex = { .x = 0, .y = -64 } },
+  /* 0:03-0:07 */ { .inner_left = { .x = -13, .y = 17 }, .inner_right = { .x = 12, .y = 19 }, .outer_left = { .x = -10, .y = -54 }, .outer_right = { .x = 15, .y = -53 }, .apex = { .x = 3, .y = -64 } },
+  /* 0:08-0:12 */ { .inner_left = { .x = -14, .y = 17 }, .inner_right = { .x = 11, .y = 19 }, .outer_left = { .x = -8, .y = -55 }, .outer_right = { .x = 17, .y = -53 }, .apex = { .x = 6, .y = -64 } },
+  /* 0:13-0:17 */ { .inner_left = { .x = -15, .y = 16 }, .inner_right = { .x = 10, .y = 19 }, .outer_left = { .x = -5, .y = -55 }, .outer_right = { .x = 19, .y = -52 }, .apex = { .x = 8, .y = -63 } },
+  /* 0:18-0:22 */ { .inner_left = { .x = -15, .y = 16 }, .inner_right = { .x = 9, .y = 20 }, .outer_left = { .x = -3, .y = -55 }, .outer_right = { .x = 22, .y = -51 }, .apex = { .x = 11, .y = -63 } },
+  /* 0:23-0:27 */ { .inner_left = { .x = -16, .y = 15 }, .inner_right = { .x = 8, .y = 20 }, .outer_left = { .x = -1, .y = -55 }, .outer_right = { .x = 24, .y = -50 }, .apex = { .x = 14, .y = -62 } },
+  /* 0:28-0:32 */ { .inner_left = { .x = -17, .y = 14 }, .inner_right = { .x = 7, .y = 21 }, .outer_left = { .x = 2, .y = -55 }, .outer_right = { .x = 26, .y = -49 }, .apex = { .x = 17, .y = -62 } },
+  /* 0:33-0:37 */ { .inner_left = { .x = -17, .y = 13 }, .inner_right = { .x = 7, .y = 21 }, .outer_left = { .x = 4, .y = -55 }, .outer_right = { .x = 28, .y = -48 }, .apex = { .x = 19, .y = -61 } },
+  /* 0:38-0:42 */ { .inner_left = { .x = -18, .y = 13 }, .inner_right = { .x = 6, .y = 21 }, .outer_left = { .x = 7, .y = -55 }, .outer_right = { .x = 30, .y = -46 }, .apex = { .x = 22, .y = -60 } },
+  /* 0:43-0:47 */ { .inner_left = { .x = -18, .y = 12 }, .inner_right = { .x = 5, .y = 21 }, .outer_left = { .x = 9, .y = -55 }, .outer_right = { .x = 32, .y = -45 }, .apex = { .x = 24, .y = -59 } },
+  /* 0:48-0:52 */ { .inner_left = { .x = -19, .y = 11 }, .inner_right = { .x = 4, .y = 22 }, .outer_left = { .x = 11, .y = -54 }, .outer_right = { .x = 34, .y = -44 }, .apex = { .x = 27, .y = -58 } },
+  /* 0:53-0:57 */ { .inner_left = { .x = -19, .y = 10 }, .inner_right = { .x = 3, .y = 22 }, .outer_left = { .x = 14, .y = -54 }, .outer_right = { .x = 36, .y = -42 }, .apex = { .x = 30, .y = -57 } },
+  /* 0:58-1:02 */ { .inner_left = { .x = -20, .y = 9 }, .inner_right = { .x = 2, .y = 22 }, .outer_left = { .x = 16, .y = -53 }, .outer_right = { .x = 38, .y = -41 }, .apex = { .x = 32, .y = -55 } },
+  /* 1:03-1:07 */ { .inner_left = { .x = -20, .y = 8 }, .inner_right = { .x = 1, .y = 22 }, .outer_left = { .x = 18, .y = -52 }, .outer_right = { .x = 40, .y = -39 }, .apex = { .x = 34, .y = -54 } },
+  /* 1:08-1:12 */ { .inner_left = { .x = -21, .y = 8 }, .inner_right = { .x = 0, .y = 22 }, .outer_left = { .x = 21, .y = -51 }, .outer_right = { .x = 41, .y = -37 }, .apex = { .x = 37, .y = -52 } },
+  /* 1:13-1:17 */ { .inner_left = { .x = -21, .y = 7 }, .inner_right = { .x = -1, .y = 22 }, .outer_left = { .x = 23, .y = -50 }, .outer_right = { .x = 43, .y = -35 }, .apex = { .x = 39, .y = -51 } },
+  /* 1:18-1:22 */ { .inner_left = { .x = -21, .y = 6 }, .inner_right = { .x = -2, .y = 22 }, .outer_left = { .x = 25, .y = -49 }, .outer_right = { .x = 44, .y = -33 }, .apex = { .x = 41, .y = -49 } },
+  /* 1:23-1:27 */ { .inner_left = { .x = -21, .y = 5 }, .inner_right = { .x = -3, .y = 22 }, .outer_left = { .x = 27, .y = -48 }, .outer_right = { .x = 46, .y = -31 }, .apex = { .x = 43, .y = -47 } },
+};
+
+// Pre-calculated snapped minute/hour poses for Gabbro (center-relative).
+static const HandPose s_minute_base_00_to_07_gabbro[8] = {
+  { .inner_left = { .x = -9, .y = 23 }, .inner_right = { .x = 10, .y = 23 }, .outer_left = { .x = -9, .y = -110 }, .outer_right = { .x = 10, .y = -110 }, .apex = { .x = 0, .y = -118 } },
+  { .inner_left = { .x = -12, .y = 22 }, .inner_right = { .x = 7, .y = 24 }, .outer_left = { .x = 2, .y = -110 }, .outer_right = { .x = 21, .y = -108 }, .apex = { .x = 12, .y = -117 } },
+  { .inner_left = { .x = -14, .y = 21 }, .inner_right = { .x = 5, .y = 24 }, .outer_left = { .x = 14, .y = -110 }, .outer_right = { .x = 32, .y = -106 }, .apex = { .x = 25, .y = -115 } },
+  { .inner_left = { .x = -16, .y = 19 }, .inner_right = { .x = 2, .y = 25 }, .outer_left = { .x = 25, .y = -108 }, .outer_right = { .x = 43, .y = -102 }, .apex = { .x = 36, .y = -112 } },
+  { .inner_left = { .x = -18, .y = 17 }, .inner_right = { .x = -1, .y = 25 }, .outer_left = { .x = 36, .y = -104 }, .outer_right = { .x = 53, .y = -97 }, .apex = { .x = 48, .y = -108 } },
+  { .inner_left = { .x = -20, .y = 15 }, .inner_right = { .x = -3, .y = 25 }, .outer_left = { .x = 47, .y = -100 }, .outer_right = { .x = 63, .y = -91 }, .apex = { .x = 59, .y = -102 } },
+  { .inner_left = { .x = -21, .y = 13 }, .inner_right = { .x = -6, .y = 24 }, .outer_left = { .x = 57, .y = -95 }, .outer_right = { .x = 72, .y = -83 }, .apex = { .x = 69, .y = -95 } },
+  { .inner_left = { .x = -22, .y = 11 }, .inner_right = { .x = -8, .y = 23 }, .outer_left = { .x = 67, .y = -88 }, .outer_right = { .x = 81, .y = -75 }, .apex = { .x = 79, .y = -88 } },
+};
+
+static const HandPose s_hour_base_00_to_89_gabbro_5min[18] = {
+  /* 0:00-0:02 */ { .inner_left = { .x = -16, .y = 23 }, .inner_right = { .x = 16, .y = 23 }, .outer_left = { .x = -16, .y = -69 }, .outer_right = { .x = 16, .y = -69 }, .apex = { .x = 0, .y = -82 } },
+  /* 0:03-0:07 */ { .inner_left = { .x = -17, .y = 22 }, .inner_right = { .x = 15, .y = 24 }, .outer_left = { .x = -13, .y = -70 }, .outer_right = { .x = 19, .y = -68 }, .apex = { .x = 4, .y = -82 } },
+  /* 0:08-0:12 */ { .inner_left = { .x = -18, .y = 22 }, .inner_right = { .x = 14, .y = 24 }, .outer_left = { .x = -10, .y = -70 }, .outer_right = { .x = 22, .y = -67 }, .apex = { .x = 7, .y = -82 } },
+  /* 0:13-0:17 */ { .inner_left = { .x = -19, .y = 21 }, .inner_right = { .x = 13, .y = 25 }, .outer_left = { .x = -7, .y = -70 }, .outer_right = { .x = 25, .y = -66 }, .apex = { .x = 11, .y = -81 } },
+  /* 0:18-0:22 */ { .inner_left = { .x = -20, .y = 20 }, .inner_right = { .x = 12, .y = 25 }, .outer_left = { .x = -4, .y = -71 }, .outer_right = { .x = 28, .y = -65 }, .apex = { .x = 14, .y = -81 } },
+  /* 0:23-0:27 */ { .inner_left = { .x = -21, .y = 19 }, .inner_right = { .x = 11, .y = 26 }, .outer_left = { .x = -1, .y = -71 }, .outer_right = { .x = 31, .y = -64 }, .apex = { .x = 18, .y = -80 } },
+  /* 0:28-0:32 */ { .inner_left = { .x = -21, .y = 18 }, .inner_right = { .x = 10, .y = 26 }, .outer_left = { .x = 2, .y = -71 }, .outer_right = { .x = 33, .y = -63 }, .apex = { .x = 21, .y = -79 } },
+  /* 0:33-0:37 */ { .inner_left = { .x = -22, .y = 17 }, .inner_right = { .x = 8, .y = 27 }, .outer_left = { .x = 5, .y = -71 }, .outer_right = { .x = 36, .y = -61 }, .apex = { .x = 25, .y = -78 } },
+  /* 0:38-0:42 */ { .inner_left = { .x = -23, .y = 16 }, .inner_right = { .x = 7, .y = 27 }, .outer_left = { .x = 9, .y = -70 }, .outer_right = { .x = 39, .y = -59 }, .apex = { .x = 28, .y = -77 } },
+  /* 0:43-0:47 */ { .inner_left = { .x = -24, .y = 15 }, .inner_right = { .x = 6, .y = 27 }, .outer_left = { .x = 12, .y = -70 }, .outer_right = { .x = 41, .y = -58 }, .apex = { .x = 31, .y = -76 } },
+  /* 0:48-0:52 */ { .inner_left = { .x = -24, .y = 14 }, .inner_right = { .x = 5, .y = 28 }, .outer_left = { .x = 15, .y = -69 }, .outer_right = { .x = 44, .y = -56 }, .apex = { .x = 35, .y = -74 } },
+  /* 0:53-0:57 */ { .inner_left = { .x = -25, .y = 13 }, .inner_right = { .x = 4, .y = 28 }, .outer_left = { .x = 18, .y = -69 }, .outer_right = { .x = 46, .y = -54 }, .apex = { .x = 38, .y = -73 } },
+  /* 0:58-1:02 */ { .inner_left = { .x = -25, .y = 12 }, .inner_right = { .x = 2, .y = 28 }, .outer_left = { .x = 21, .y = -68 }, .outer_right = { .x = 48, .y = -52 }, .apex = { .x = 41, .y = -71 } },
+  /* 1:03-1:07 */ { .inner_left = { .x = -26, .y = 11 }, .inner_right = { .x = 1, .y = 28 }, .outer_left = { .x = 24, .y = -67 }, .outer_right = { .x = 51, .y = -50 }, .apex = { .x = 44, .y = -69 } },
+  /* 1:08-1:12 */ { .inner_left = { .x = -26, .y = 10 }, .inner_right = { .x = 0, .y = 28 }, .outer_left = { .x = 26, .y = -66 }, .outer_right = { .x = 53, .y = -47 }, .apex = { .x = 47, .y = -67 } },
+  /* 1:13-1:17 */ { .inner_left = { .x = -27, .y = 9 }, .inner_right = { .x = -1, .y = 28 }, .outer_left = { .x = 29, .y = -64 }, .outer_right = { .x = 55, .y = -45 }, .apex = { .x = 50, .y = -65 } },
+  /* 1:18-1:22 */ { .inner_left = { .x = -27, .y = 7 }, .inner_right = { .x = -3, .y = 28 }, .outer_left = { .x = 32, .y = -63 }, .outer_right = { .x = 57, .y = -43 }, .apex = { .x = 53, .y = -63 } },
+  /* 1:23-1:27 */ { .inner_left = { .x = -27, .y = 6 }, .inner_right = { .x = -4, .y = 28 }, .outer_left = { .x = 35, .y = -62 }, .outer_right = { .x = 58, .y = -40 }, .apex = { .x = 55, .y = -60 } },
+};
+
+static RelPoint prv_rel_rotate_90_cw(RelPoint p) {
+  return (RelPoint){ .x = -p.y, .y = p.x };
+}
+
+static RelPoint prv_rel_transpose_invert(RelPoint p) {
+  return (RelPoint){ .x = -p.y, .y = -p.x };
+}
+
+static HandPose prv_pose_rotate_90_cw(HandPose pose) {
+  return (HandPose){
+    .inner_left  = prv_rel_rotate_90_cw(pose.inner_left),
+    .inner_right = prv_rel_rotate_90_cw(pose.inner_right),
+    .outer_left  = prv_rel_rotate_90_cw(pose.outer_left),
+    .outer_right = prv_rel_rotate_90_cw(pose.outer_right),
+    .apex        = prv_rel_rotate_90_cw(pose.apex),
   };
-  GPoint outer_pt = {
-    center.x + prv_trig_offset_compensated(outer_dist, sin_a),
-    center.y - prv_trig_offset_compensated(outer_dist, cos_a),
+}
+
+static HandPose prv_pose_transpose_invert(HandPose pose) {
+  return (HandPose){
+    .inner_left  = prv_rel_transpose_invert(pose.inner_left),
+    .inner_right = prv_rel_transpose_invert(pose.inner_right),
+    .outer_left  = prv_rel_transpose_invert(pose.outer_left),
+    .outer_right = prv_rel_transpose_invert(pose.outer_right),
+    .apex        = prv_rel_transpose_invert(pose.apex),
   };
+}
 
-  int32_t x_diff_left  = prv_trig_offset_trunc(half_width, cos_a);
-  int32_t y_diff_left  = prv_trig_offset_trunc(half_width, sin_a);
-  int32_t x_diff_right = prv_trig_offset_compensated(half_width, cos_a);
-  int32_t y_diff_right = prv_trig_offset_compensated(half_width, sin_a);
+static HandPose prv_minute_pose_for_minute(uint8_t minute, bool is_gabbro) {
+  const HandPose *base = is_gabbro ? s_minute_base_00_to_07_gabbro : s_minute_base_00_to_07_emery;
+  uint8_t quarter = minute / 15;
+  uint8_t quarter_index = minute % 15;
+  HandPose pose = (quarter_index <= 7)
+    ? base[quarter_index]
+    : prv_pose_transpose_invert(base[15 - quarter_index]);
 
-  GPoint inner_right = { inner_pt.x + x_diff_right, inner_pt.y + y_diff_right };
-  GPoint inner_left  = { inner_pt.x - x_diff_left,  inner_pt.y - y_diff_left };
-  GPoint outer_right = { outer_pt.x + x_diff_right, outer_pt.y + y_diff_right };
-  GPoint outer_left  = { outer_pt.x - x_diff_left,  outer_pt.y - y_diff_left };
-  GPoint apex        = {
-    outer_pt.x + prv_trig_offset_compensated(apex_ext, sin_a),
-    outer_pt.y - prv_trig_offset_compensated(apex_ext, cos_a),
-  };
-
-  // Additional correction on top of side compensation:
-  // shift outer_left and outer_right together by 1 px so their midpoint
-  // stays as close as possible to the hand main axis.
-  int32_t inner_mid_x = (inner_left.x + inner_right.x) / 2;
-  int32_t inner_mid_y = (inner_left.y + inner_right.y) / 2;
-  int32_t axis_dx = apex.x - inner_mid_x;
-  int32_t axis_dy = apex.y - inner_mid_y;
-
-  if (axis_dx != 0 || axis_dy != 0) {
-    const int shifts[5][2] = { {0, 0}, {1, 0}, {-1, 0}, {0, 1}, {0, -1} };
-    int best_index = 0;
-    int64_t best_error = -1;
-
-    for (int i = 0; i < 5; i++) {
-      int32_t sx = shifts[i][0];
-      int32_t sy = shifts[i][1];
-      int32_t test_outer_mid_x = (outer_left.x + sx + outer_right.x + sx) / 2;
-      int32_t test_outer_mid_y = (outer_left.y + sy + outer_right.y + sy) / 2;
-      int64_t cross = (int64_t)axis_dx * (test_outer_mid_y - inner_mid_y)
-                    - (int64_t)axis_dy * (test_outer_mid_x - inner_mid_x);
-      int64_t err = prv_abs64(cross);
-      if (best_error < 0 || err < best_error) {
-        best_error = err;
-        best_index = i;
-      }
-    }
-
-    if (best_index != 0) {
-      int32_t sx = shifts[best_index][0];
-      int32_t sy = shifts[best_index][1];
-      outer_left.x += sx;
-      outer_left.y += sy;
-      outer_right.x += sx;
-      outer_right.y += sy;
-    }
+  for (uint8_t i = 0; i < quarter; i++) {
+    pose = prv_pose_rotate_90_cw(pose);
   }
+  return pose;
+}
+
+static uint8_t prv_hour_5min_sample_index(uint8_t quarter_index) {
+  // Round to nearest 5-minute sample (0,5,...,85), with edge clamping.
+  uint8_t sample = (quarter_index + 2) / 5;
+  return sample > 17 ? 17 : sample;
+}
+
+static HandPose prv_hour_pose_for_time(uint8_t hour_12, uint8_t minute, bool is_gabbro) {
+  const HandPose *base = is_gabbro ? s_hour_base_00_to_89_gabbro_5min : s_hour_base_00_to_89_emery_5min;
+  uint16_t total = (uint16_t)hour_12 * 60 + minute; // 0..719
+  uint8_t quarter = total / 180;
+  uint8_t quarter_index = total % 180;
+  HandPose pose = (quarter_index < 90)
+    ? base[prv_hour_5min_sample_index(quarter_index)]
+    : prv_pose_transpose_invert(base[prv_hour_5min_sample_index((uint8_t)(179 - quarter_index))]);
+
+  for (uint8_t i = 0; i < quarter; i++) {
+    pose = prv_pose_rotate_90_cw(pose);
+  }
+  return pose;
+}
+
+static GPoint prv_abs_from_rel(GPoint center, RelPoint p) {
+  return (GPoint){ .x = center.x + p.x, .y = center.y + p.y };
+}
+
+static void draw_hand_pose_border(GContext *ctx, GPoint center, HandPose pose,
+                                  int stroke_w, GColor color) {
+  GPoint inner_left  = prv_abs_from_rel(center, pose.inner_left);
+  GPoint inner_right = prv_abs_from_rel(center, pose.inner_right);
+  GPoint outer_left  = prv_abs_from_rel(center, pose.outer_left);
+  GPoint outer_right = prv_abs_from_rel(center, pose.outer_right);
+  GPoint apex        = prv_abs_from_rel(center, pose.apex);
 
   graphics_context_set_stroke_color(ctx, color);
   graphics_context_set_stroke_width(ctx, stroke_w);
@@ -230,16 +323,16 @@ static void draw_hand_border(GContext *ctx, GPoint center, int32_t angle,
   graphics_draw_line(ctx, outer_left,  apex);
 }
 
-// ── Draws the filled pentagon body of a hand ──────────────────────────────
-static void draw_hand_fill(GContext *ctx, GPoint center, int32_t angle,
-                           int length, int width, int tail, GColor color) {
-  int hw = width / 2;
+static void draw_hand_pose_fill(GContext *ctx, GPoint center, HandPose pose, GColor color) {
   GPoint pts[5] = {
-    {-hw, tail}, {hw, tail}, {hw, -length}, {0, -(length + hw)}, {-hw, -length}
+    { pose.inner_left.x,  pose.inner_left.y  },
+    { pose.inner_right.x, pose.inner_right.y },
+    { pose.outer_right.x, pose.outer_right.y },
+    { pose.apex.x,        pose.apex.y        },
+    { pose.outer_left.x,  pose.outer_left.y  },
   };
   GPathInfo info = { .num_points = 5, .points = pts };
   GPath *path = gpath_create(&info);
-  gpath_rotate_to(path, angle);
   gpath_move_to(path, center);
   graphics_context_set_fill_color(ctx, color);
   gpath_draw_filled(ctx, path);
@@ -286,54 +379,28 @@ static void canvas_update_proc(Layer *layer, GContext *ctx) {
   int tick_r = is_gabbro
     ? ((half * GABBRO_TICK_RADIUS_PERCENT + 50) / 100)
     : EMERY_TICK_RADIUS;
-  int minute_len = is_gabbro
-    ? (tick_r * GABBRO_MINUTE_HAND_LENGTH_PERCENT / 100)
-    : (half * EMERY_MINUTE_HAND_LENGTH_PERCENT / 100);
-  int hour_len = is_gabbro
-    ? (tick_r * GABBRO_HOUR_HAND_LENGTH_PERCENT / 100)
-    : (half * EMERY_HOUR_HAND_LENGTH_PERCENT / 100);
   int hand_edge_w = is_gabbro ? GABBRO_HAND_EDGE_WIDTH : EMERY_HAND_EDGE_WIDTH;
   int hand_halo_w = is_gabbro ? GABBRO_HAND_HALO_WIDTH : EMERY_HAND_HALO_WIDTH;
-  int minute_outer_w = is_gabbro ? GABBRO_MINUTE_HAND_OUTER_WIDTH : EMERY_MINUTE_HAND_OUTER_WIDTH;
-  int minute_fill_w = is_gabbro ? GABBRO_MINUTE_HAND_FILL_WIDTH : EMERY_MINUTE_HAND_FILL_WIDTH;
-  int hour_outer_w = is_gabbro ? GABBRO_HOUR_HAND_OUTER_WIDTH : EMERY_HOUR_HAND_OUTER_WIDTH;
-  int hour_fill_w = is_gabbro ? GABBRO_HOUR_HAND_FILL_WIDTH : EMERY_HOUR_HAND_FILL_WIDTH;
-  int hand_tail = is_gabbro ? GABBRO_HAND_TAIL_LENGTH : EMERY_HAND_TAIL_LENGTH;
   int tick_w = is_gabbro ? GABBRO_TICK_WIDTH : EMERY_TICK_WIDTH;
   int tick_halo_w = is_gabbro ? GABBRO_TICK_HALO_WIDTH : EMERY_TICK_HALO_WIDTH;
   int tick_len = is_gabbro ? GABBRO_TICK_LENGTH : EMERY_TICK_LENGTH;
   int pivot_r = is_gabbro ? GABBRO_PIVOT_RADIUS : EMERY_PIVOT_RADIUS;
 
-  int32_t min_angle  = s_minutes * TRIG_MAX_ANGLE / 60;
-  int32_t hour_angle = (s_hours % 12) * TRIG_MAX_ANGLE / 12
-                       + s_minutes * TRIG_MAX_ANGLE / 720;
+  HandPose minute_pose = prv_minute_pose_for_minute((uint8_t)s_minutes, is_gabbro);
+  HandPose hour_pose = prv_hour_pose_for_time((uint8_t)(s_hours % 12), (uint8_t)s_minutes, is_gabbro);
 
   // ── Background ────────────────────────────────────────────────────────
   graphics_context_set_fill_color(ctx, bg);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
   // ── Hour hand ─────────────────────────────────────────────────────────
-  draw_hand_border(ctx, center, hour_angle,
-                   hour_len - hand_edge_w / 2,
-                   hour_outer_w / 2 - hand_edge_w / 2,
-                   hour_outer_w / 2 - hand_edge_w / 2,
-                   hand_tail, hand_edge_w, fg);
-  draw_hand_fill(ctx, center, hour_angle,
-                 hour_len - hand_edge_w / 2 - 1, hour_fill_w, hand_tail, fg);
+  draw_hand_pose_fill(ctx, center, hour_pose, fg);
+  draw_hand_pose_border(ctx, center, hour_pose, hand_edge_w, fg);
 
   // ── Minute hand ───────────────────────────────────────────────────────
-  draw_hand_border(ctx, center, min_angle,
-                   minute_len - hand_edge_w / 2,
-                   minute_outer_w / 2 - hand_edge_w / 2,
-                   minute_outer_w / 2 - hand_edge_w / 2,
-                   hand_tail, hand_edge_w + 2 * hand_halo_w, minute_halo);
-  draw_hand_border(ctx, center, min_angle,
-                   minute_len - hand_edge_w / 2,
-                   minute_outer_w / 2 - hand_edge_w / 2,
-                   minute_outer_w / 2 - hand_edge_w / 2,
-                   hand_tail, hand_edge_w, fg);
-  draw_hand_fill(ctx, center, min_angle,
-                 minute_len - hand_edge_w / 2 - 1, minute_fill_w, hand_tail, fg);
+  draw_hand_pose_border(ctx, center, minute_pose, hand_edge_w + 2 * hand_halo_w, minute_halo);
+  draw_hand_pose_fill(ctx, center, minute_pose, fg);
+  draw_hand_pose_border(ctx, center, minute_pose, hand_edge_w, fg);
 
   // ── Center pivot ──────────────────────────────────────────────────────
   graphics_context_set_fill_color(ctx, bg);

@@ -43,3 +43,8 @@ create_minute_screenshots_emery: kill_emulator build install_emulator_emery
 .PHONY: create_minute_screenshots_gabbro
 create_minute_screenshots_gabbro: kill_emulator build install_emulator_gabbro
 	./scripts/create_minute_screenshots.sh --emulator gabbro
+
+.PHONY: create_hand_coordinates
+create_hand_coordinates:
+	uv run scripts/create_hand_coordinates.py --platform=gabbro
+
