@@ -5,3 +5,4 @@ tmp
 .python-version
 pyproject.toml
 node_modules
+uv.lock
