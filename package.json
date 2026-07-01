@@ -2,7 +2,10 @@
   "name": "pebble-nyquist-watchface",
   "author": "Tuukka Ruhanen",
   "version": "1.1.0",
-  "keywords": ["analog", "big"],
+  "keywords": [
+    "analog",
+    "big"
+  ],
   "private": true,
   "dependencies": {},
   "pebble": {
@@ -14,7 +17,10 @@
       "emery",
       "gabbro"
     ],
-    "capabilities": ["location", "configurable"],
+    "capabilities": [
+      "location",
+      "configurable"
+    ],
     "watchapp": {
       "watchface": true
     },
@@ -35,21 +41,82 @@
     ],
     "resources": {
       "media": [
-        { "type": "bitmap", "name": "LAUNCHER_ICON", "file": "launcher_icon.png", "menuIcon": true },
-        { "file": "data/WEATHER_GENERIC.pdc", "name": "WEATHER_GENERIC", "type": "raw" },
-        { "file": "data/WEATHER_THUNDERSTORM.pdc", "name": "WEATHER_THUNDERSTORM", "type": "raw" },
-        { "file": "data/WEATHER_RAINING_AND_SNOWING.pdc", "name": "WEATHER_RAINING_AND_SNOWING", "type": "raw" },
-        { "file": "data/WEATHER_PARTLY_CLOUDY_NIGHT.pdc", "name": "WEATHER_PARTLY_CLOUDY_NIGHT", "type": "raw" },
-        { "file": "data/WEATHER_PARTLY_CLOUDY.pdc", "name": "WEATHER_PARTLY_CLOUDY", "type": "raw" },
-        { "file": "data/WEATHER_LIGHT_SNOW.pdc", "name": "WEATHER_LIGHT_SNOW", "type": "raw" },
-        { "file": "data/WEATHER_LIGHT_RAIN.pdc", "name": "WEATHER_LIGHT_RAIN", "type": "raw" },
-        { "file": "data/WEATHER_HEAVY_SNOW.pdc", "name": "WEATHER_HEAVY_SNOW", "type": "raw" },
-        { "file": "data/WEATHER_HEAVY_RAIN.pdc", "name": "WEATHER_HEAVY_RAIN", "type": "raw" },
-        { "file": "data/WEATHER_CLOUDY.pdc", "name": "WEATHER_CLOUDY", "type": "raw" },
-        { "file": "data/WEATHER_CLEAR_NIGHT.pdc", "name": "WEATHER_CLEAR_NIGHT", "type": "raw" },
-        { "file": "data/WEATHER_CLEAR_DAY.pdc", "name": "WEATHER_CLEAR_DAY", "type": "raw" },
-        { "file": "data/BATTERY_CHARGE.pdc", "name": "BATTERY_CHARGE", "type": "raw" },
-        { "file": "data/BATTERY_BG.pdc", "name": "BATTERY_BG", "type": "raw" }
+        {
+          "type": "bitmap",
+          "name": "LAUNCHER_ICON",
+          "file": "launcher_icon.png",
+          "menuIcon": true
+        },
+        {
+          "file": "data/WEATHER_GENERIC.pdc",
+          "name": "WEATHER_GENERIC",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_THUNDERSTORM.pdc",
+          "name": "WEATHER_THUNDERSTORM",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_RAINING_AND_SNOWING.pdc",
+          "name": "WEATHER_RAINING_AND_SNOWING",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_PARTLY_CLOUDY_NIGHT.pdc",
+          "name": "WEATHER_PARTLY_CLOUDY_NIGHT",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_PARTLY_CLOUDY.pdc",
+          "name": "WEATHER_PARTLY_CLOUDY",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_LIGHT_SNOW.pdc",
+          "name": "WEATHER_LIGHT_SNOW",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_LIGHT_RAIN.pdc",
+          "name": "WEATHER_LIGHT_RAIN",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_HEAVY_SNOW.pdc",
+          "name": "WEATHER_HEAVY_SNOW",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_HEAVY_RAIN.pdc",
+          "name": "WEATHER_HEAVY_RAIN",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_CLOUDY.pdc",
+          "name": "WEATHER_CLOUDY",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_CLEAR_NIGHT.pdc",
+          "name": "WEATHER_CLEAR_NIGHT",
+          "type": "raw"
+        },
+        {
+          "file": "data/WEATHER_CLEAR_DAY.pdc",
+          "name": "WEATHER_CLEAR_DAY",
+          "type": "raw"
+        },
+        {
+          "file": "data/BATTERY_CHARGE.pdc",
+          "name": "BATTERY_CHARGE",
+          "type": "raw"
+        },
+        {
+          "file": "data/BATTERY_BG.pdc",
+          "name": "BATTERY_BG",
+          "type": "raw"
+        }
       ]
     }
   }
