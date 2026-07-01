@@ -8,7 +8,7 @@ set -euo pipefail
 # Usage:
 #   scripts/create_1010_bw_screenshots.sh [--output-dir <path>]
 # Example:
-#   scripts/create_1010_bw_screenshots.sh --output-dir tmp/screenshots-1010-bw
+#   scripts/create_1010_bw_screenshots.sh --output-dir screenshots
 
 OUTPUT_DIR=""
 
@@ -31,8 +31,10 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "${OUTPUT_DIR}" ]]; then
-  OUTPUT_DIR="tmp/screenshots-1010-bw"
+  OUTPUT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/screenshots"
 fi
+
+mkdir -p "${OUTPUT_DIR}"
 
 prepare_platform() {
   local platform="$1"
@@ -46,9 +48,7 @@ prepare_platform() {
 capture_single() {
   local platform="$1"
   local mode="$2"
-  local outdir="${OUTPUT_DIR}/${platform}"
-  local filename="${outdir}/10-10-${mode}.png"
-  mkdir -p "${outdir}"
+  local filename="${OUTPUT_DIR}/${platform}-${mode}.png"
 
   pebble emu-set-time "10:10:00" --emulator "${platform}"
   sleep 0.5
@@ -102,4 +102,4 @@ send_invert_settings_save "gabbro"
 sleep 0.5
 capture_single "gabbro" "inverted"
 
-echo "Done. Screenshots saved under ${OUTPUT_DIR}/{emery,gabbro}"
+echo "Done. Screenshots saved to ${OUTPUT_DIR}"
