@@ -36,13 +36,13 @@ start_emulator_with_logs_emery: kill_emulator
 start_emulator_with_logs_gabbro: kill_emulator
 	pebble logs --emulator=gabbro
 
-.PHONY: create_minute_screenshots_emery
-create_minute_screenshots_emery: kill_emulator build install_emulator_emery
-	./scripts/create_minute_screenshots.sh --emulator emery
+.PHONY: create_hand_position_screenshots
+create_hand_position_screenshots:
+	./scripts/create_hand_position_screenshots.sh
 
-.PHONY: create_minute_screenshots_gabbro
-create_minute_screenshots_gabbro: kill_emulator build install_emulator_gabbro
-	./scripts/create_minute_screenshots.sh --emulator gabbro
+.PHONY: create_app_store_screenshots
+create_app_store_screenshots:
+	./scripts/create_app_store_screenshots.sh
 
 .PHONY: create_hand_coordinates
 create_hand_coordinates:
